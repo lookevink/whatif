@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import yaml
+from pydantic import ValidationError
 from google import genai
 from google.genai import types
 
@@ -93,7 +94,7 @@ def _load_inferrer_prompt(project_root: Path) -> str:
     return "You are a narrative analyst. Infer events, structure, pacing, character voice/knowledge/arc, prop lifecycles."
 
 
-SCENES_PER_INFER_CHUNK = 40
+SCENES_PER_INFER_CHUNK = 20
 
 
 def _condense_scene_for_infer(scene: dict) -> dict:
@@ -201,7 +202,7 @@ def _call_infer_narrative(
     parsed: dict,
     extract_ctx: dict,
     system_prompt: str,
-    max_output_tokens: int = 32768,
+    max_output_tokens: int = 65536,
 ) -> InferNarrativeOutput:
     api_key = get_gemini_api_key()
     if not api_key:
@@ -232,7 +233,7 @@ Use scene ids and character ids from extract context. If extract is empty, infer
         config=types.GenerateContentConfig(
             system_instruction=system_prompt,
             response_mime_type="application/json",
-            response_schema=InferNarrativeOutput,
+            response_json_schema=InferNarrativeOutput.model_json_schema(),
             temperature=0.2,
             max_output_tokens=max_output_tokens,
         ),
@@ -246,6 +247,65 @@ Use scene ids and character ids from extract context. If extract is empty, infer
             lines = lines[:-1]
         text = "\n".join(lines)
     return InferNarrativeOutput.model_validate_json(text)
+
+
+def _call_infer_narrative_with_retry(
+    parsed: dict,
+    extract_ctx: dict,
+    system_prompt: str,
+    max_output_tokens: int = 65536,
+    min_scenes_to_split: int = 5,
+) -> InferNarrativeOutput:
+    """Call narrative inference with retry on truncated JSON."""
+    try:
+        return _call_infer_narrative(parsed, extract_ctx, system_prompt, max_output_tokens)
+    except ValidationError as e:
+        err_str = str(e).lower()
+        is_truncation = "json_invalid" in err_str or "eof" in err_str or "unexpected end" in err_str
+        scenes = parsed.get("scenes", [])
+        if not is_truncation or len(scenes) < min_scenes_to_split:
+            raise
+
+        # Retry with smaller chunks: split this input in half
+        mid = len(scenes) // 2
+        ext_scenes = extract_ctx.get("scenes", [])
+        scene_numbers_lo = {s.get("scene_number") for s in scenes[:mid]}
+        scene_numbers_hi = {s.get("scene_number") for s in scenes[mid:]}
+        ext_lo = [s for s in ext_scenes if isinstance(s, dict) and s.get("scene_order") in scene_numbers_lo]
+        ext_hi = [s for s in ext_scenes if isinstance(s, dict) and s.get("scene_order") in scene_numbers_hi]
+        char_ids_lo = set()
+        for s in ext_lo:
+            char_ids_lo.update(s.get("character_ids", []))
+        char_ids_hi = set()
+        for s in ext_hi:
+            char_ids_hi.update(s.get("character_ids", []))
+
+        parsed_lo = {
+            "title_page": parsed.get("title_page", {}),
+            "characters": parsed.get("characters", []),
+            "scenes": scenes[:mid],
+        }
+        parsed_hi = {
+            "title_page": parsed.get("title_page", {}),
+            "characters": parsed.get("characters", []),
+            "scenes": scenes[mid:],
+        }
+        ext_lo_dict = {
+            "characters": [c for c in extract_ctx.get("characters", []) if c.get("id") in char_ids_lo],
+            "scenes": ext_lo,
+            "locations": extract_ctx.get("locations", []),
+            "props": extract_ctx.get("props", []),
+        }
+        ext_hi_dict = {
+            "characters": [c for c in extract_ctx.get("characters", []) if c.get("id") in char_ids_hi],
+            "scenes": ext_hi,
+            "locations": extract_ctx.get("locations", []),
+            "props": extract_ctx.get("props", []),
+        }
+
+        out_lo = _call_infer_narrative(parsed_lo, ext_lo_dict, system_prompt, max_output_tokens)
+        out_hi = _call_infer_narrative(parsed_hi, ext_hi_dict, system_prompt, max_output_tokens)
+        return _merge_narrative_chunks([out_lo, out_hi], len(scenes))
 
 
 def _call_infer_characters(
@@ -276,7 +336,7 @@ Return InferCharacterOutput with characters array. Each has character_id, voice,
         config=types.GenerateContentConfig(
             system_instruction=system_prompt,
             response_mime_type="application/json",
-            response_schema=InferCharacterOutput,
+            response_json_schema=InferCharacterOutput.model_json_schema(),
             temperature=0.2,
             max_output_tokens=16384,
         ),
@@ -312,7 +372,7 @@ Return InferPropsOutput: props (with lifecycle), world_rules (list of strings), 
         config=types.GenerateContentConfig(
             system_instruction=system_prompt,
             response_mime_type="application/json",
-            response_schema=InferPropsOutput,
+            response_json_schema=InferPropsOutput.model_json_schema(),
             temperature=0.2,
             max_output_tokens=16384,
         ),
@@ -479,13 +539,13 @@ def run_infer(project_root: Path | None = None) -> None:
         chunks = _chunk_narrative_input(parsed, extract_ctx)
         outputs = []
         for parsed_chunk, ext_chunk in chunks:
-            out = _call_infer_narrative(
-                parsed_chunk, ext_chunk, prompt, max_output_tokens=16384
+            out = _call_infer_narrative_with_retry(
+                parsed_chunk, ext_chunk, prompt, max_output_tokens=65536
             )
             outputs.append(out)
         narrative = _merge_narrative_chunks(outputs, total_scenes)
     else:
-        narrative = _call_infer_narrative(parsed, extract_ctx, prompt)
+        narrative = _call_infer_narrative_with_retry(parsed, extract_ctx, prompt)
 
     characters = _call_infer_characters(parsed, extract_ctx, narrative.events, prompt)
     props_out = _call_infer_props(extract_ctx, narrative.events, prompt)

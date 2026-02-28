@@ -5,6 +5,7 @@ backend/__pycache__
 index.db
 # Studio data — each project (.studio/projects/<name>/) is its own git repo
 .studio/
+.studio/*
 
 backend/*/__pycache__
 

@@ -151,7 +151,7 @@ Return ONLY valid JSON with keys: characters, scenes, locations, props. No markd
         config=types.GenerateContentConfig(
             system_instruction=system_prompt,
             response_mime_type="application/json",
-            response_schema=ExtractOutput,
+            response_json_schema=ExtractOutput.model_json_schema(),
             temperature=0.2,
             max_output_tokens=max_output_tokens,
         ),
