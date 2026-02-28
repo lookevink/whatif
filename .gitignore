@@ -3,9 +3,11 @@ backend/__pycache__
 
 # SQLite index — never in git, always derived from YAML
 index.db
-.studio/index.db
-.studio/cache/
+# Studio data — each project (.studio/projects/<name>/) is its own git repo
+.studio/
 
 backend/*/__pycache__
 
 .env
+
+**/.DS_Store
