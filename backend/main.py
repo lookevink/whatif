@@ -914,11 +914,10 @@ async def _generate_panel_image(
     output_path: Path,
     character_png_paths: list[Path],
 ) -> bool:
-    """Generate a storyboard panel image using Gemini.
+    """Generate a storyboard panel image using Nano Banana 2.
 
-    Uses the google-genai SDK (same as envision.py).
-    Strategy 1: gemini-2.0-flash-exp with image output.
-    Strategy 2: imagen-3.0-generate-002 fallback.
+    Uses gemini-3.1-flash-image-preview (Nano Banana 2) for fast,
+    high-quality storyboard panel generation with 16:9 aspect ratio.
     Returns True if image was generated, False otherwise.
     """
     api_key = get_gemini_api_key()
@@ -929,9 +928,10 @@ async def _generate_panel_image(
     _genai, _types = _get_genai()
     client = _genai.Client(vertexai=False, api_key=api_key)
 
-    # ── Strategy 1: gemini-2.0-flash-exp with image output ──
     try:
         contents: list = []
+
+        # Include character reference PNGs for visual consistency
         for png_path in character_png_paths[:3]:
             if png_path.exists():
                 contents.append(
@@ -940,42 +940,28 @@ async def _generate_panel_image(
                         mime_type="image/png",
                     )
                 )
+
         contents.append(prompt)
 
         response = client.models.generate_content(
-            model="gemini-2.0-flash-exp",
+            model="gemini-3.1-flash-image-preview",
             contents=contents,
             config=_types.GenerateContentConfig(
-                response_modalities=["IMAGE", "TEXT"],
-                temperature=0.8,
+                response_modalities=["TEXT", "IMAGE"],
+                image_config=_types.ImageConfig(
+                    aspect_ratio="16:9",
+                ),
             ),
         )
 
-        for part in response.candidates[0].content.parts:
+        for part in response.parts:
             if part.inline_data and part.inline_data.mime_type.startswith("image/"):
                 output_path.parent.mkdir(parents=True, exist_ok=True)
                 output_path.write_bytes(part.inline_data.data)
                 return True
 
     except Exception as e:
-        print(f"Gemini image gen failed for {output_path.name}: {e}")
-
-    # ── Strategy 2: Imagen 3 ──
-    try:
-        response = client.models.generate_images(
-            model="imagen-3.0-generate-002",
-            prompt=prompt[:480],
-            config=_types.GenerateImagesConfig(
-                number_of_images=1,
-                aspect_ratio="16:9",
-            ),
-        )
-        if response.generated_images:
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_bytes(response.generated_images[0].image.image_bytes)
-            return True
-    except Exception as e2:
-        print(f"Imagen fallback also failed: {e2}")
+        print(f"Nano Banana 2 image gen failed for {output_path.name}: {e}")
 
     return False
 
@@ -1319,3 +1305,268 @@ def api_whatif_scene_branches(scene_id: str, project_name: str = Query("default"
         return {"scene_id": scene_id, "branches": branches}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Character Dialogue API ---
+
+
+class DialogueMessage(BaseModel):
+    role: str  # "user" or "character"
+    character_id: str
+    text: str
+
+
+class CharacterDialogueRequest(BaseModel):
+    scene_id: str
+    act: str
+    user_character_id: str
+    ai_character_id: str
+    message: str
+    conversation_history: list[DialogueMessage] = []
+    project_name: str | None = "default"
+
+
+def _load_character_data(char_id: str, project_name: str) -> dict:
+    """Load complete character data: profile, voice, knowledge, relationships, arc."""
+    project_root = get_project_root()
+    chars_dir = get_characters_dir(project_root, project_name)
+    char_dir = chars_dir / char_id
+
+    data: dict[str, Any] = {"id": char_id, "name": char_id.replace("_", " ").title()}
+
+    for filename in ("profile.yaml", "voice.yaml", "knowledge.yaml", "arc.yaml"):
+        filepath = char_dir / filename
+        if filepath.exists():
+            key = filename.replace(".yaml", "")
+            try:
+                data[key] = yaml.safe_load(filepath.read_text(encoding="utf-8")) or {}
+            except Exception:
+                pass
+
+    # relationships.yaml may contain !!python/object tags from Pydantic serialisation
+    rel_path = char_dir / "relationships.yaml"
+    if rel_path.exists():
+        try:
+            raw = rel_path.read_text(encoding="utf-8")
+            # Strip !!python/object tags so safe_load works
+            cleaned = re.sub(r"!!python/object:\S+", "", raw)
+            cleaned = re.sub(r"__pydantic_\w+__:.*", "", cleaned)
+            data["relationships"] = yaml.safe_load(cleaned) or {}
+        except Exception:
+            pass
+
+    return data
+
+
+def _build_character_system_prompt(
+    ai_char_data: dict,
+    user_char_id: str,
+    scene_yaml: dict,
+    dialogue: list[dict],
+) -> str:
+    """Build a system prompt for in-character dialogue."""
+    profile = ai_char_data.get("profile", {})
+    name = profile.get("name", ai_char_data.get("name", "Unknown"))
+    description = profile.get("description", "")
+    user_name = user_char_id.replace("_", " ").title()
+
+    parts: list[str] = []
+
+    # Identity
+    parts.append(f"You ARE {name}. {description}")
+    parts.append(f"You are having a conversation with {user_name}.")
+    parts.append("Stay completely in character at all times. Do NOT break character.")
+    parts.append("Do NOT follow the original script. Improvise based on who you are.")
+
+    # Voice
+    voice = ai_char_data.get("voice", {})
+    sp = voice.get("speech_patterns", {})
+    if sp:
+        parts.append("\n## How You Speak")
+        if sp.get("sentence_length"):
+            parts.append(f"- Sentence length: {sp['sentence_length']}")
+        if sp.get("vocabulary_level"):
+            parts.append(f"- Vocabulary: {sp['vocabulary_level']}")
+        if sp.get("dialect"):
+            parts.append(f"- Dialect: {sp['dialect']}")
+        if sp.get("subtext_style"):
+            parts.append(f"- Your subtext style: {sp['subtext_style']}")
+        if sp.get("verbal_tics"):
+            parts.append(f"- Verbal tics: {', '.join(sp['verbal_tics'])}")
+        if sp.get("avoids"):
+            parts.append(f"- You AVOID: {', '.join(sp['avoids'])}")
+    example_lines = sp.get("example_lines") or voice.get("example_lines", [])
+    if example_lines:
+        parts.append("- Example lines (for tone reference, do not repeat verbatim):")
+        for line in example_lines[:3]:
+            parts.append(f'  "{line}"')
+
+    # Knowledge
+    knowledge = ai_char_data.get("knowledge", {})
+    if knowledge.get("knows"):
+        parts.append("\n## What You Know")
+        for item in knowledge["knows"]:
+            confidence = item.get("confidence", "certain")
+            parts.append(f"- [{confidence}] {item.get('fact', '')}")
+    if knowledge.get("does_not_know"):
+        parts.append("\n## What You Do NOT Know")
+        for item in knowledge["does_not_know"]:
+            parts.append(f"- {item.get('fact', '')} ({item.get('reason', '')})")
+    if knowledge.get("beliefs"):
+        parts.append("\n## Your Beliefs")
+        for belief in knowledge["beliefs"]:
+            parts.append(f"- {belief.get('belief', '')}")
+    if knowledge.get("secrets_held"):
+        parts.append("\n## Secrets You Hold")
+        for secret in knowledge["secrets_held"]:
+            hidden = secret.get("hidden_from", [])
+            if user_char_id in hidden:
+                parts.append(f"- SECRET (hidden from {user_name}): {secret.get('fact', '')} - Do NOT reveal this.")
+            else:
+                parts.append(f"- {secret.get('fact', '')}")
+
+    # Relationship with the user's character
+    relationships = ai_char_data.get("relationships", {}).get("relationships", {})
+    rel = relationships.get(user_char_id, {})
+    if rel:
+        parts.append(f"\n## Your Relationship with {user_name}")
+        if rel.get("type"):
+            parts.append(f"- Type: {rel['type']}")
+        evolutions = rel.get("evolution", [])
+        if evolutions and isinstance(evolutions, list):
+            latest = evolutions[-1]
+            # Handle nested __dict__ from Pydantic serialisation
+            state = latest.get("__dict__", latest) if isinstance(latest, dict) else latest
+            if isinstance(state, dict):
+                if state.get("note"):
+                    parts.append(f"- Context: {state['note']}")
+                s = state.get("state", {})
+                if isinstance(s, dict):
+                    if s.get("dynamic"):
+                        parts.append(f"- Dynamic: {s['dynamic']}")
+                    if s.get("power_balance"):
+                        parts.append(f"- Power balance: {s['power_balance']}")
+
+    # Arc
+    arc = ai_char_data.get("arc", {})
+    if arc:
+        parts.append("\n## Your Character Arc")
+        if arc.get("from"):
+            parts.append(f"- From: {arc['from']}")
+        if arc.get("to"):
+            parts.append(f"- To: {arc['to']}")
+        if arc.get("type"):
+            parts.append(f"- Type: {arc['type']}")
+
+    # Scene context
+    parts.append("\n## Scene Context (for background only, do NOT follow the scripted dialogue)")
+    parts.append(f"- Scene: {scene_yaml.get('heading', scene_yaml.get('id', ''))}")
+    parts.append(f"- Summary: {scene_yaml.get('summary', '')}")
+
+    # Original dialogue for context awareness (but not to follow)
+    if dialogue:
+        parts.append("- Original dialogue in this scene (DO NOT repeat, just be aware of the context):")
+        for line in dialogue[:5]:
+            char = line.get("character", "")
+            text = line.get("text", "")[:100]
+            parts.append(f"  {char}: {text}")
+
+    # Rules
+    parts.append("\n## Rules")
+    parts.append("- Respond ONLY as your character. No narration, no stage directions.")
+    parts.append("- Keep responses concise -- 1-3 sentences typically, like natural dialogue.")
+    parts.append("- React emotionally based on your knowledge, beliefs, and relationships.")
+    parts.append("- If asked about something you don't know, respond naturally (confused, deflecting, etc).")
+    parts.append("- NEVER break the fourth wall or acknowledge you are an AI.")
+    parts.append("- Do NOT use quotation marks around your dialogue. Just speak directly.")
+
+    return "\n".join(parts)
+
+
+@app.get("/api/studio/dialogue/characters/{scene_id}")
+def api_dialogue_characters(
+    scene_id: str,
+    act: str = Query(...),
+    project_name: str = Query("default"),
+):
+    """Get characters available for dialogue in a scene."""
+    scene_yaml = _load_scene_yaml(scene_id, act, project_name)
+    char_ids = scene_yaml.get("character_ids", [])
+    project_root = get_project_root()
+    chars_dir = get_characters_dir(project_root, project_name)
+    characters = []
+    for cid in char_ids:
+        profile = _load_character_profile(cid, project_name)
+        char_dir = chars_dir / cid
+        has_voice = (char_dir / "voice.yaml").exists()
+        has_knowledge = (char_dir / "knowledge.yaml").exists()
+        characters.append({
+            "id": cid,
+            "name": profile.get("name", cid.replace("_", " ").title()),
+            "description": profile.get("description", ""),
+            "has_voice_data": has_voice,
+            "has_knowledge_data": has_knowledge,
+            "dialogue_ready": has_voice and has_knowledge,
+        })
+    return {"scene_id": scene_id, "characters": characters}
+
+
+@app.post("/api/studio/dialogue/chat")
+async def api_dialogue_chat(request: CharacterDialogueRequest):
+    """Stream an in-character response from the AI character via SSE."""
+    project_name = request.project_name or "default"
+
+    # Load all data
+    ai_char_data = _load_character_data(request.ai_character_id, project_name)
+    scene_yaml = _load_scene_yaml(request.scene_id, request.act, project_name)
+    dialogue = _load_scene_dialogue(request.scene_id, request.act, project_name)
+
+    # Build system prompt
+    system_prompt = _build_character_system_prompt(
+        ai_char_data, request.user_character_id, scene_yaml, dialogue,
+    )
+
+    gemini_key = get_gemini_api_key()
+    if not gemini_key:
+        raise HTTPException(status_code=503, detail="Gemini API key not configured")
+
+    _genai, _types = _get_genai()
+    client = _genai.Client(vertexai=False, api_key=gemini_key)
+
+    # Build conversation history
+    history = []
+    for msg in request.conversation_history:
+        role = "user" if msg.role == "user" else "model"
+        history.append(
+            _types.Content(role=role, parts=[_types.Part(text=msg.text)])
+        )
+
+    chat = client.chats.create(
+        model="gemini-2.5-flash",
+        config=_types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            temperature=0.85,
+            max_output_tokens=300,
+        ),
+        history=history,
+    )
+
+    async def event_stream():
+        try:
+            for chunk in chat.send_message_stream(request.message):
+                if chunk.text:
+                    data = json.dumps({"type": "chunk", "text": chunk.text})
+                    yield f"data: {data}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

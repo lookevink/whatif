@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { CircleHelp } from 'lucide-react';
+import { CircleHelp, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { BabylonSceneViewer } from '../components/studio/BabylonSceneViewer';
 import { StoryboardGenerator } from '../components/studio/StoryboardGenerator';
 import { WhatIfExplorer } from '../components/studio/WhatIfExplorer';
+import { CharacterDialoguePanel } from '../components/studio/CharacterDialoguePanel';
 import { ConfidenceBadge } from '../components/studio/ConfidenceBadge';
 import { BauhausLogo } from '../components/studio/BauhausLogo';
 import { StudioDataLoader } from '../lib/studio/data-loader';
@@ -25,6 +26,7 @@ export const SceneDetailPage: React.FC = () => {
   const [branch] = useState<string>(state?.branch ?? 'main');
   const [loading, setLoading] = useState(!state?.scene && !!sceneId);
   const [showWhatIf, setShowWhatIf] = useState(false);
+  const [showDialogue, setShowDialogue] = useState(false);
   const [viewerFullscreen, setViewerFullscreen] = useState(false);
 
   const sceneModels = useMemo(() => {
@@ -153,6 +155,19 @@ export const SceneDetailPage: React.FC = () => {
             </div>
           </div>
 
+          {/* Character Dialogue FAB – Blue */}
+          <Button
+            size="icon-lg"
+            variant="secondary"
+            shape="pill"
+            onClick={() => setShowDialogue(true)}
+            className="fixed bottom-24 right-8 shadow-bauhaus-lg hover:-translate-y-1 transition-all duration-200 z-40"
+            title="Character Dialogue"
+            aria-label="Open Character Dialogue"
+          >
+            <MessageCircle className="size-8" strokeWidth={3} />
+          </Button>
+
           {/* What If FAB – Yellow, geometric */}
           <Button
             size="icon-lg"
@@ -214,6 +229,38 @@ export const SceneDetailPage: React.FC = () => {
                 onQuery={handleWhatIfQuery}
                 embedded
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Character Dialogue panel – slides in */}
+      {showDialogue && (
+        <div className="fixed inset-0 z-50 flex">
+          <div
+            className="absolute inset-0 bg-[#121212]/60"
+            onClick={() => setShowDialogue(false)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === 'Escape' && setShowDialogue(false)}
+          />
+          <div className="relative ml-auto w-full max-w-xl bg-white border-l-4 border-[#121212] shadow-bauhaus-lg overflow-hidden flex flex-col animate-slide-in">
+            <div className="flex-shrink-0 bg-[#1040C0] border-b-4 border-[#121212] px-6 py-4 flex items-center justify-between">
+              <h2 className="font-subheading text-white">Character Dialogue</h2>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowDialogue(false)}
+                className="text-white hover:bg-white/10"
+                aria-label="Close"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </Button>
+            </div>
+            <div className="flex-1 overflow-hidden p-6">
+              <CharacterDialoguePanel scene={scene} />
             </div>
           </div>
         </div>

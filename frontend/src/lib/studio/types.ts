@@ -351,6 +351,25 @@ export interface ProposedChange {
   confidence: number;
 }
 
+// Character Dialogue types
+export interface DialogueMessage {
+  id: string;
+  role: 'user' | 'character';
+  characterId: string;
+  characterName: string;
+  text: string;
+  timestamp: number;
+}
+
+export interface DialogueCharacter {
+  id: string;
+  name: string;
+  description: string;
+  hasVoiceData: boolean;
+  hasKnowledgeData: boolean;
+  dialogueReady: boolean;
+}
+
 // Storyboard generation types
 export interface StoryboardRequest {
   sceneId: string;
