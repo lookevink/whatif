@@ -30,35 +30,23 @@ export const GitTreeVisualization: React.FC<GitTreeVisualizationProps> = ({
 
   const loadGitData = async () => {
     try {
-      const response = await fetch('/api/studio/git-tree');
-      const data = await response.json();
-      setGitData(data);
+      const response = await fetch('/api/studio/projects/default/git-tree');
+      if (response.ok) {
+        const data = await response.json();
+        setGitData(data);
+        return;
+      }
     } catch (error) {
-      console.error('Failed to load git tree:', error);
-      // Fallback to mock data for development
-      setGitData({
-        branches: [
-          {
-            name: 'main',
-            commits: [
-              { id: 'abc123', message: 'Initial ingestion', timestamp: '2024-02-28T10:00:00', author: 'system' },
-              { id: 'def456', message: 'Scene 5 camera update', timestamp: '2024-02-28T11:00:00', author: 'director' }
-            ]
-          },
-          {
-            name: 'what-if/marcus-confronts-jane',
-            parent: 'main',
-            commits: [
-              { id: 'abc123', message: 'Initial ingestion', timestamp: '2024-02-28T10:00:00', author: 'system' },
-              { id: 'def456', message: 'Scene 5 camera update', timestamp: '2024-02-28T11:00:00', author: 'director' },
-              { id: 'ghi789', message: 'Marcus confronts Jane directly', timestamp: '2024-02-28T12:00:00', author: 'director' }
-            ]
-          }
-        ],
-        currentBranch: currentBranch,
-        mainBranch: 'main'
-      });
+      console.warn('Could not load git tree:', error);
     }
+    setGitData({
+      branches: [
+        { name: 'main', commits: [] },
+        { name: 'what-if/explore', parent: 'main', commits: [] }
+      ],
+      currentBranch: currentBranch,
+      mainBranch: 'main'
+    });
   };
 
   const drawGitTree = () => {

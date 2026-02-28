@@ -16,9 +16,12 @@ export class StudioDataLoader {
   /**
    * Load a scene with all its associated data
    * Gracefully handles missing files and generates fallbacks
+   * @param sceneId - scene ID (e.g. scene_001)
+   * @param act - optional act from API (e.g. act1); uses heuristic if omitted
    */
-  async loadScene(sceneId: string): Promise<Scene> {
-    const scenePath = `${this.projectRoot}/scenes/${this.getActFromSceneId(sceneId)}/${sceneId}`;
+  async loadScene(sceneId: string, act?: string): Promise<Scene> {
+    const sceneAct = act ?? this.getActFromSceneId(sceneId);
+    const scenePath = `${this.projectRoot}/scenes/${sceneAct}/${sceneId}`;
     const scene: Partial<Scene> = {
       id: sceneId,
       _status: {
@@ -34,6 +37,16 @@ export class StudioDataLoader {
     try {
       const sceneYaml = await this.loadYaml(`${scenePath}/scene.yaml`);
       Object.assign(scene, sceneYaml);
+      // Map backend snake_case to frontend camelCase
+      if ('scene_order' in scene && !('sceneOrder' in scene)) {
+        scene.sceneOrder = (scene as any).scene_order;
+      }
+      if ('location_id' in scene && !scene.location) {
+        scene.location = (scene as any).location_id;
+      }
+      if ('character_ids' in scene && !scene.characters) {
+        scene.characters = ((scene as any).character_ids || []).map((id: string) => ({ id, name: id }));
+      }
     } catch (error) {
       scene._status!.missingFields.push('scene.yaml');
       // Generate basic scene info from ID
@@ -126,7 +139,7 @@ export class StudioDataLoader {
     const charPath = `${this.projectRoot}/characters/${characterId}`;
     const character: Partial<CharacterProfile> = {
       id: characterId,
-      name: characterId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+      name: characterId.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
     };
 
     // Load profile
@@ -173,7 +186,7 @@ export class StudioDataLoader {
     const locPath = `${this.projectRoot}/world/locations/${locationId}`;
     const location: Partial<Location> = {
       id: locationId,
-      name: locationId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+      name: locationId.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
     };
 
     try {
@@ -206,22 +219,20 @@ export class StudioDataLoader {
   }
 
   /**
-   * Load all available scenes in the project
-   * Browser version - would need API endpoint
+   * Load all available scenes in the project (id + act from API)
    */
-  async loadAllScenes(): Promise<string[]> {
+  async loadAllScenes(): Promise<Array<{ id: string; act: string }>> {
     try {
-      // In browser, this would call an API endpoint
-      const response = await fetch(`/api/studio/scenes`);
+      const response = await fetch(`${this.projectRoot}/scenes`);
       if (response.ok) {
-        return await response.json();
+        const data = await response.json();
+        return Array.isArray(data) ? data : [];
       }
     } catch (error) {
       console.warn('Could not load scenes:', error);
     }
 
-    // Fallback mock data
-    return ['scene_001', 'scene_002', 'scene_003', 'scene_004', 'scene_005'];
+    return [];
   }
 
   /**
@@ -244,9 +255,9 @@ export class StudioDataLoader {
     const scenes = await this.loadAllScenes();
     let allComplete = true;
 
-    for (const sceneId of scenes) {
-      const scene = await this.loadScene(sceneId);
-      report.scenes[sceneId] = scene._status!;
+    for (const ref of scenes) {
+      const scene = await this.loadScene(ref.id, ref.act);
+      report.scenes[ref.id] = scene._status!;
       if (!scene._status!.complete) {
         allComplete = false;
       }
@@ -260,21 +271,33 @@ export class StudioDataLoader {
 
   // Helper methods
 
+  /** Convert project path to API file URL (backend serves at /files/{path}) */
+  private toFileUrl(path: string): string {
+    if (path.startsWith(this.projectRoot + '/files/')) return path;
+    if (path.startsWith(this.projectRoot + '/')) {
+      return this.projectRoot + '/files' + path.slice(this.projectRoot.length);
+    }
+    return path;
+  }
+
   private async loadYaml(filePath: string): Promise<any> {
-    const response = await fetch(filePath);
+    const url = this.toFileUrl(filePath);
+    const response = await fetch(url);
     if (!response.ok) throw new Error(`Failed to load ${filePath}`);
     const content = await response.text();
     return yaml.load(content);
   }
 
   private async loadJson(filePath: string): Promise<any> {
-    const response = await fetch(filePath);
+    const url = this.toFileUrl(filePath);
+    const response = await fetch(url);
     if (!response.ok) throw new Error(`Failed to load ${filePath}`);
     return await response.json();
   }
 
   private async loadFile(filePath: string): Promise<string> {
-    const response = await fetch(filePath);
+    const url = this.toFileUrl(filePath);
+    const response = await fetch(url);
     if (!response.ok) throw new Error(`Failed to load ${filePath}`);
     return await response.text();
   }
@@ -289,9 +312,10 @@ export class StudioDataLoader {
   private async loadSceneCharacters(scene: Partial<Scene>): Promise<any[]> {
     const characters = [];
 
-    // Try to get character list from scene.yaml
-    if (scene.characters && Array.isArray(scene.characters)) {
-      for (const charRef of scene.characters) {
+    // Try to get character list from scene.yaml (character_ids or characters)
+    const charRefs = scene.characters ?? (scene as any).character_ids;
+    if (charRefs && Array.isArray(charRefs)) {
+      for (const charRef of charRefs) {
         const charId = typeof charRef === 'string' ? charRef : charRef.id;
         try {
           const character = await this.loadCharacter(charId);
@@ -300,7 +324,7 @@ export class StudioDataLoader {
           // Character not found, create placeholder
           characters.push({
             id: charId,
-            name: charId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+            name: charId.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
           });
         }
       }
@@ -319,7 +343,7 @@ export class StudioDataLoader {
         } catch (error) {
           characters.push({
             id: charId,
-            name: charId.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+            name: charId.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
           });
         }
       }

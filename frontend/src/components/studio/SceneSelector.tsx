@@ -27,9 +27,9 @@ export const SceneSelector: React.FC<SceneSelectorProps> = ({
     setLoading(true);
     try {
       const loader = new StudioDataLoader(projectRoot);
-      const sceneIds = await loader.loadAllScenes();
+      const sceneRefs = await loader.loadAllScenes();
       const loadedScenes = await Promise.all(
-        sceneIds.map(id => loader.loadScene(id))
+        sceneRefs.map(ref => loader.loadScene(ref.id, ref.act))
       );
       setScenes(loadedScenes);
 
@@ -171,7 +171,7 @@ export const SceneSelector: React.FC<SceneSelectorProps> = ({
                     <div className="flex items-start justify-between mb-2">
                       <div className="text-left">
                         <div className="font-semibold text-gray-800">
-                          {scene.id.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                          {scene.id.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
                         </div>
                         {scene.location && (
                           <div className="text-xs text-gray-500 mt-1">

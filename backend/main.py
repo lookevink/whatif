@@ -1,10 +1,25 @@
 from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 
-from ingestion.config import get_project_root, get_script_dir
+from ingestion.config import (
+    get_project_root,
+    get_project_dir,
+    get_script_dir,
+    get_scenes_dir,
+)
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 ALLOWED_EXTENSIONS = {".fountain", ".txt", ".spmd", ".pdf"}
 
@@ -42,6 +57,90 @@ async def upload_document(file: UploadFile = File(...)):
         "path": str(dest.relative_to(project_root)),
         "size": len(content),
     }
+
+
+# --- Studio API (serve .studio/projects/<name>/ files to frontend) ---
+
+
+def _resolve_project_file(project_name: str, file_path: str) -> Path:
+    """Resolve a path within the project dir. Reject path traversal."""
+    if ".." in file_path or file_path.startswith("/"):
+        raise HTTPException(status_code=400, detail="Invalid path")
+    project_root = get_project_root()
+    project_dir = get_project_dir(project_root, project_name)
+    resolved = (project_dir / file_path).resolve()
+    if not resolved.is_relative_to(project_dir.resolve()):
+        raise HTTPException(status_code=403, detail="Path outside project")
+    return resolved
+
+
+@app.get("/api/studio/projects/{project_name}/scenes")
+def api_studio_scenes(project_name: str):
+    """List all scenes with id and act (from filesystem structure)."""
+    project_root = get_project_root()
+    scenes_dir = get_scenes_dir(project_root, project_name)
+    if not scenes_dir.exists():
+        return []
+
+    def _order(s: str) -> int:
+        try:
+            return int(s.replace("scene_", "").split("_")[0] or 0)
+        except (ValueError, IndexError):
+            return 0
+
+    scenes = []
+    for act_dir in sorted(scenes_dir.iterdir()):
+        if act_dir.is_dir() and act_dir.name.startswith("act"):
+            for scene_dir in act_dir.iterdir():
+                if scene_dir.is_dir() and scene_dir.name.startswith("scene_"):
+                    scenes.append({"id": scene_dir.name, "act": act_dir.name})
+    return sorted(scenes, key=lambda s: _order(s["id"]))
+
+
+@app.get("/api/studio/projects/{project_name}/git-tree")
+def api_studio_git_tree(project_name: str):
+    """Stub: return git tree data for the project (runs in project's .git)."""
+    import subprocess
+    project_root = get_project_root()
+    project_dir = get_project_dir(project_root, project_name)
+    git_dir = project_dir / ".git"
+    if not git_dir.exists():
+        return {"branches": [], "currentBranch": "main", "mainBranch": "main"}
+    try:
+        branches_raw = subprocess.run(
+            ["git", "-C", str(project_dir), "branch", "-a"],
+            capture_output=True, text=True, timeout=5,
+        )
+        branches = []
+        for line in (branches_raw.stdout or "").strip().splitlines():
+            name = line.lstrip("* ").strip().replace("remotes/origin/", "")
+            if name and name not in ("HEAD",):
+                branches.append({"name": name, "commits": []})
+        return {
+            "branches": branches or [{"name": "main", "commits": []}],
+            "currentBranch": "main",
+            "mainBranch": "main",
+        }
+    except Exception:
+        return {"branches": [{"name": "main", "commits": []}], "currentBranch": "main", "mainBranch": "main"}
+
+
+@app.get("/api/studio/projects/{project_name}/files/{file_path:path}")
+def api_studio_file(project_name: str, file_path: str):
+    """Serve a project file (yaml, json, md, etc.)."""
+    try:
+        resolved = _resolve_project_file(project_name, file_path)
+    except HTTPException:
+        raise
+    if not resolved.exists() or not resolved.is_file():
+        raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+    content = resolved.read_text(encoding="utf-8")
+    suffix = resolved.suffix.lower()
+    if suffix in (".yaml", ".yml"):
+        return PlainTextResponse(content, media_type="text/yaml")
+    if suffix == ".json":
+        return PlainTextResponse(content, media_type="application/json")
+    return PlainTextResponse(content, media_type="text/plain")
 
 
 # --- Ingestion API ---

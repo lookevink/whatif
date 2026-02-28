@@ -86,7 +86,7 @@ export const StudioApp: React.FC = () => {
           <SceneSelector
             branch={currentBranch}
             onSceneSelect={handleSceneSelect}
-            projectRoot="../"
+            projectRoot="/api/studio/projects/default"
           />
         </div>
 
