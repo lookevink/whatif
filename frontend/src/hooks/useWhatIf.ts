@@ -5,7 +5,7 @@
 import { useState, useCallback } from 'react';
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8101';
+const API_BASE_URL = import.meta.env.VITE_WHATIF_API_URL || 'http://localhost:8101';
 
 interface WhatIfSceneRequest {
   sceneId: string;
@@ -22,12 +22,24 @@ interface StoryBlock {
   metadata?: Record<string, any>;
 }
 
+interface StoryboardPanel {
+  index: number;
+  shotType: string;
+  description: string;
+  dialogue?: string[];
+  cameraAngle?: string;
+  lighting?: string;
+  imageUrl?: string;
+  prompt?: string;
+}
+
 interface WhatIfSceneResponse {
   success: boolean;
   branchName: string;
   sceneId: string;
   modifiedYaml: Record<string, any>;
   storyBlocks: StoryBlock[];
+  storyboard: StoryboardPanel[];
   commitHash?: string;
   message: string;
 }
@@ -36,6 +48,7 @@ interface PreviewResponse {
   originalYaml: Record<string, any>;
   modifiedYaml: Record<string, any>;
   storyBlocks: StoryBlock[];
+  storyboard: StoryboardPanel[];
   changesSummary: {
     added: string[];
     modified: string[];

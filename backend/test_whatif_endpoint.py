@@ -5,10 +5,17 @@ Test script for the What-If Scene API
 
 import requests
 import json
+import os
 from datetime import datetime
 
 # API base URL
 BASE_URL = "http://localhost:8101"
+
+# Check for Gemini API key
+if not os.environ.get("GEMINI_API_KEY"):
+    print("⚠️  Warning: GEMINI_API_KEY not set. AI features will use fallback mode.")
+    print("   Set it with: export GEMINI_API_KEY='your-key-here'")
+    print()
 
 def test_preview_whatif():
     """Test the preview endpoint without creating a branch"""

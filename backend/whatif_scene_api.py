@@ -16,8 +16,7 @@ from datetime import datetime
 import re
 import asyncio
 from pathlib import Path
-from openai import OpenAI
-import anthropic
+import google.generativeai as genai
 
 app = FastAPI(title="WhatIf Scene API")
 
@@ -30,22 +29,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize AI clients (choose one based on your preference)
+# Initialize Gemini AI client
 try:
-    # Try OpenAI first
-    openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-    ai_provider = "openai"
-except:
-    openai_client = None
+    gemini_api_key = os.environ.get("GEMINI_API_KEY")
+    if gemini_api_key:
+        genai.configure(api_key=gemini_api_key)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        ai_provider = "gemini"
+    else:
+        model = None
+        ai_provider = None
+except Exception as e:
+    print(f"Failed to initialize Gemini: {e}")
+    model = None
     ai_provider = None
-
-try:
-    # Try Anthropic as fallback
-    anthropic_client = anthropic.Client(api_key=os.environ.get("ANTHROPIC_API_KEY"))
-    if not ai_provider:
-        ai_provider = "anthropic"
-except:
-    anthropic_client = None
 
 class WhatIfSceneRequest(BaseModel):
     """Request model for what-if scene modification"""
@@ -217,29 +214,16 @@ async def ai_modify_scene(scene_yaml: Dict[str, Any], what_if_text: str) -> Dict
     """
 
     try:
-        if ai_provider == "openai" and openai_client:
-            response = openai_client.chat.completions.create(
-                model="gpt-4",
-                messages=[
-                    {"role": "system", "content": "You are a screenplay editor that modifies scene descriptions based on 'what if' scenarios. Return only valid YAML."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.7,
-                max_tokens=1000
+        if ai_provider == "gemini" and model:
+            # Use Gemini for scene modification
+            response = model.generate_content(
+                prompt,
+                generation_config=genai.GenerationConfig(
+                    temperature=0.7,
+                    max_output_tokens=1000,
+                )
             )
-            modified_yaml_text = response.choices[0].message.content
-
-        elif ai_provider == "anthropic" and anthropic_client:
-            response = anthropic_client.messages.create(
-                model="claude-3-haiku-20240307",
-                max_tokens=1000,
-                temperature=0.7,
-                system="You are a screenplay editor that modifies scene descriptions based on 'what if' scenarios. Return only valid YAML.",
-                messages=[
-                    {"role": "user", "content": prompt}
-                ]
-            )
-            modified_yaml_text = response.content[0].text
+            modified_yaml_text = response.text
 
         else:
             # Fallback: Simple rule-based modification
