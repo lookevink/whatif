@@ -426,7 +426,7 @@ async def _ai_modify_scene(scene_yaml: dict, what_if_text: str) -> dict:
         import google.generativeai as genai
 
         genai.configure(api_key=gemini_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        model = genai.GenerativeModel("gemini-2.5-flash")
 
         prompt = f"""Given this scene YAML:
 {yaml.dump(scene_yaml, default_flow_style=False)}

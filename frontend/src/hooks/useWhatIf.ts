@@ -5,7 +5,7 @@
 import { useState, useCallback } from 'react';
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_WHATIF_API_URL || 'http://localhost:8101';
+const API_BASE_URL = import.meta.env.VITE_WHATIF_API_URL || 'http://localhost:8000';
 
 interface WhatIfSceneRequest {
   sceneId: string;
@@ -70,7 +70,7 @@ export function useWhatIf() {
     setError(null);
 
     try {
-      const response = await axios.post<PreviewResponse>(
+      const response = await axios.post(
         `${API_BASE_URL}/api/studio/whatif/scene/preview`,
         {
           scene_id: request.sceneId,
@@ -80,8 +80,18 @@ export function useWhatIf() {
         }
       );
 
-      setPreview(response.data);
-      return response.data;
+      // Normalize snake_case keys from backend to camelCase
+      const raw = response.data;
+      const normalized: PreviewResponse = {
+        originalYaml: raw.original_yaml ?? raw.originalYaml ?? {},
+        modifiedYaml: raw.modified_yaml ?? raw.modifiedYaml ?? {},
+        storyBlocks: raw.story_blocks ?? raw.storyBlocks ?? [],
+        storyboard: raw.storyboard ?? [],
+        changesSummary: raw.changes_summary ?? raw.changesSummary ?? { added: [], modified: [], removed: [] },
+      };
+
+      setPreview(normalized);
+      return normalized;
     } catch (err: any) {
       const errorMessage = err.response?.data?.detail || err.message || 'Failed to preview what-if changes';
       setError(errorMessage);
@@ -99,7 +109,7 @@ export function useWhatIf() {
     setError(null);
 
     try {
-      const response = await axios.post<WhatIfSceneResponse>(
+      const response = await axios.post(
         `${API_BASE_URL}/api/studio/whatif/scene/create`,
         {
           scene_id: request.sceneId,
@@ -110,8 +120,21 @@ export function useWhatIf() {
         }
       );
 
-      setResult(response.data);
-      return response.data;
+      // Normalize snake_case keys from backend to camelCase
+      const raw = response.data;
+      const normalized: WhatIfSceneResponse = {
+        success: raw.success,
+        branchName: raw.branch_name ?? raw.branchName ?? '',
+        sceneId: raw.scene_id ?? raw.sceneId ?? '',
+        modifiedYaml: raw.modified_yaml ?? raw.modifiedYaml ?? {},
+        storyBlocks: raw.story_blocks ?? raw.storyBlocks ?? [],
+        storyboard: raw.storyboard ?? [],
+        commitHash: raw.commit_hash ?? raw.commitHash,
+        message: raw.message ?? '',
+      };
+
+      setResult(normalized);
+      return normalized;
     } catch (err: any) {
       const errorMessage = err.response?.data?.detail || err.message || 'Failed to create what-if scene';
       setError(errorMessage);
