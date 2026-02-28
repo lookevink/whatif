@@ -59,7 +59,13 @@ export class StudioDataLoader {
     // Load dialogue
     try {
       const dialogueJson = await this.loadJson(`${scenePath}/dialogue.json`);
-      scene.dialogue = dialogueJson;
+      // Normalize: dialogue.json may use { text, parenthetical } vs Dialogue type { line, delivery }
+      scene.dialogue = (Array.isArray(dialogueJson) ? dialogueJson : []).map((d: any) => ({
+        character: d.character ?? '',
+        line: d.line ?? d.text ?? '',
+        delivery: d.delivery ?? d.parenthetical ?? undefined,
+        subtext: d.subtext
+      }));
     } catch (error) {
       scene._status!.missingFields.push('dialogue.json');
       // Will need to generate from directions or context
@@ -173,6 +179,22 @@ export class StudioDataLoader {
     }
 
     return character as CharacterProfile;
+  }
+
+  /**
+   * Load character visual assets (glbModel for 3D viewer)
+   */
+  private async loadCharacterVisual(characterId: string): Promise<{ glbModel?: string } | null> {
+    const visualPath = `${this.projectRoot}/characters/${characterId}/assets/visual.yaml`;
+    try {
+      const visual = await this.loadYaml(visualPath);
+      if (visual?.glbModel) {
+        return { glbModel: visual.glbModel };
+      }
+    } catch {
+      // No visual assets
+    }
+    return null;
   }
 
   /**
@@ -319,7 +341,12 @@ export class StudioDataLoader {
         const charId = typeof charRef === 'string' ? charRef : charRef.id;
         try {
           const character = await this.loadCharacter(charId);
-          characters.push({ ...character, id: charId });
+          const visual = await this.loadCharacterVisual(charId);
+          characters.push({
+            ...character,
+            id: charId,
+            ...(visual && { visual })
+          });
         } catch (error) {
           // Character not found, create placeholder
           characters.push({
@@ -339,7 +366,12 @@ export class StudioDataLoader {
       for (const charId of charSet) {
         try {
           const character = await this.loadCharacter(charId);
-          characters.push({ ...character, id: charId });
+          const visual = await this.loadCharacterVisual(charId);
+          characters.push({
+            ...character,
+            id: charId,
+            ...(visual && { visual })
+          });
         } catch (error) {
           characters.push({
             id: charId,

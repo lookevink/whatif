@@ -2,7 +2,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 
 from ingestion.config import (
     get_project_root,
@@ -125,17 +125,23 @@ def api_studio_git_tree(project_name: str):
         return {"branches": [{"name": "main", "commits": []}], "currentBranch": "main", "mainBranch": "main"}
 
 
+BINARY_EXTENSIONS = {".glb", ".gltf", ".bin", ".png", ".jpg", ".jpeg", ".webp", ".ktx2"}
+
+
 @app.get("/api/studio/projects/{project_name}/files/{file_path:path}")
 def api_studio_file(project_name: str, file_path: str):
-    """Serve a project file (yaml, json, md, etc.)."""
+    """Serve a project file (yaml, json, md, glb, etc.). Binary assets use FileResponse."""
     try:
         resolved = _resolve_project_file(project_name, file_path)
     except HTTPException:
         raise
     if not resolved.exists() or not resolved.is_file():
         raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
-    content = resolved.read_text(encoding="utf-8")
     suffix = resolved.suffix.lower()
+    if suffix in BINARY_EXTENSIONS:
+        media_types = {".glb": "model/gltf-binary", ".gltf": "model/gltf+json"}
+        return FileResponse(resolved, media_type=media_types.get(suffix))
+    content = resolved.read_text(encoding="utf-8")
     if suffix in (".yaml", ".yml"):
         return PlainTextResponse(content, media_type="text/yaml")
     if suffix == ".json":

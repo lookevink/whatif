@@ -1,60 +1,76 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { BabylonSceneViewer } from '../components/studio/BabylonSceneViewer';
 import { StoryboardGenerator } from '../components/studio/StoryboardGenerator';
 import { WhatIfExplorer } from '../components/studio/WhatIfExplorer';
 import { ConfidenceBadge } from '../components/studio/ConfidenceBadge';
+import { StudioDataLoader } from '../lib/studio/data-loader';
 import type { Scene, CharacterModel, PropModel, LocationModel } from '../lib/studio/types';
+
+const PROJECT_ROOT = '/api/studio/projects/default';
+
+function toGlbUrl(projectRelativePath: string): string {
+  return `${PROJECT_ROOT}/files/${projectRelativePath}`;
+}
 
 export const SceneDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const { sceneId } = useParams();
   const { state } = useLocation() as { state?: { scene: Scene; branch: string } };
-  const [scene] = useState<Scene | null>(state?.scene ?? null);
+  const [scene, setScene] = useState<Scene | null>(state?.scene ?? null);
   const [branch] = useState<string>(state?.branch ?? 'main');
+  const [loading, setLoading] = useState(!state?.scene && !!sceneId);
   const [showWhatIf, setShowWhatIf] = useState(false);
   const [viewerFullscreen, setViewerFullscreen] = useState(false);
 
-  const [sceneModels, setSceneModels] = useState<{
-    characters: CharacterModel[];
-    props: PropModel[];
-    location: LocationModel | undefined;
-  }>({
-    characters: [],
-    props: [],
-    location: undefined
-  });
-
-  // If we navigated here without state (e.g. refresh), we'd need to load the scene
-  // For now, redirect back if no scene
-  React.useEffect(() => {
-    if (!scene && sceneId) {
-      // Could fetch scene by ID here; for now redirect
-      navigate('/', { replace: true });
-    }
-  }, [scene, sceneId, navigate]);
-
-  React.useEffect(() => {
-    if (!scene) return;
-    const characters: CharacterModel[] = scene.characters?.map((char, idx) => ({
-      id: typeof char === 'string' ? char : char.id,
-      name: typeof char === 'string' ? char : char.name,
-      position: { x: idx * 2 - 2, y: 0, z: 0 },
-      rotation: { x: 0, y: 0, z: 0 },
-      fallbackModel: 'capsule'
-    })) || [];
+  const sceneModels = useMemo(() => {
+    if (!scene) return { characters: [], props: [] as PropModel[], location: undefined as LocationModel | undefined };
+    const loc = scene.location;
+    const locId = typeof loc === 'string' ? loc : loc?.id || 'default';
+    const glbModel = typeof loc === 'object' && loc?.glbModel;
+    const characters: CharacterModel[] = scene.characters?.map((char, idx) => {
+      const c = typeof char === 'string' ? { id: char, name: char } : char;
+      return {
+        id: c.id,
+        name: c.name,
+        glbPath: c.visual?.glbModel ? toGlbUrl(c.visual.glbModel) : undefined,
+        position: { x: idx * 2 - 2, y: 0, z: 0 },
+        rotation: { x: 0, y: 0, z: 0 },
+        fallbackModel: 'capsule'
+      };
+    }) || [];
     const location: LocationModel = {
-      id: typeof scene.location === 'string' ? scene.location : scene.location?.id || 'default',
+      id: locId,
+      glbPath: glbModel ? toGlbUrl(glbModel) : undefined,
       ambientLight: { intensity: 0.5, color: '#ffffff' }
     };
-    setSceneModels({ characters, props: [], location });
+    return { characters, props: [], location };
   }, [scene]);
+
+  // Load scene when no state (e.g. refresh or direct URL)
+  useEffect(() => {
+    if (!scene && sceneId) {
+      const loader = new StudioDataLoader(PROJECT_ROOT);
+      loader.loadAllScenes()
+        .then((refs) => {
+          const ref = refs.find((r) => r.id === sceneId);
+          return loader.loadScene(sceneId, ref?.act);
+        })
+        .then(setScene)
+        .catch(() => navigate('/', { replace: true }))
+        .finally(() => setLoading(false));
+    }
+  }, [scene, sceneId, navigate]);
 
   const handleWhatIfQuery = async (query: string) => {
     console.log('What-if query:', query);
   };
 
-  if (!scene) return null;
+  if (loading || !scene) return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500" />
+    </div>
+  );
 
   return (
     <>
@@ -83,6 +99,31 @@ export const SceneDetailPage: React.FC = () => {
 
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex flex-1 overflow-hidden">
+            {/* Scene dialogue & directions */}
+            {scene.dialogue && scene.dialogue.length > 0 && (
+              <div className="w-80 flex-shrink-0 border-r border-gray-200 bg-white overflow-auto">
+                <div className="p-4">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Dialogue</h3>
+                  <div className="space-y-2 text-sm">
+                    {scene.dialogue.map((line, idx) => (
+                      <div key={idx} className="border-l-2 border-gray-300 pl-3">
+                        <span className="font-medium text-gray-800">{line.character}:</span>{' '}
+                        <span className="text-gray-600">{line.line}</span>
+                        {line.delivery && (
+                          <span className="block text-xs text-gray-500 italic mt-0.5">{line.delivery}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  {scene.directions && (
+                    <>
+                      <h3 className="text-sm font-semibold text-gray-700 mt-4 mb-2">Directions</h3>
+                      <p className="text-sm text-gray-600 whitespace-pre-wrap">{scene.directions}</p>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
             {/* Storyboard panel */}
             <div className="flex-1 overflow-auto p-6">
               <StoryboardGenerator scene={scene} />
