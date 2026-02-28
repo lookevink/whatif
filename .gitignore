@@ -1,2 +1,11 @@
 backend/.venv/
 backend/__pycache__
+
+# SQLite index — never in git, always derived from YAML
+index.db
+.studio/index.db
+.studio/cache/
+
+backend/*/__pycache__
+
+.env
