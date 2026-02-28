@@ -115,7 +115,7 @@ export function useWhatIf() {
           scene_id: request.sceneId,
           act: request.act,
           what_if_text: request.whatIfText,
-          current_branch: request.currentBranch || 'main',
+          current_branch: request.currentBranch || null,
           project_name: request.projectName || 'default'
         }
       );
