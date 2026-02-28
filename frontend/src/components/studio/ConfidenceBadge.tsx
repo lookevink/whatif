@@ -34,6 +34,12 @@ export const ConfidenceBadge: React.FC<ConfidenceBadgeProps> = ({
 
   const pct = Math.round(confidence * 100);
 
+  const getBarColor = () => {
+    if (complete) return '#1040C0';
+    if (pct > 80) return '#F0C020';
+    return '#D02020';
+  };
+
   return (
     <div
       className="relative inline-block"
@@ -45,8 +51,10 @@ export const ConfidenceBadge: React.FC<ConfidenceBadgeProps> = ({
         type="button"
         variant="ghost"
         size="icon-xs"
-        className={`inline-flex items-center justify-center rounded-full ${
-          dark ? 'text-white/80 hover:text-white hover:bg-white/10' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+        className={`inline-flex items-center justify-center rounded-full font-black ${
+          dark
+            ? 'text-white/90 hover:text-white hover:bg-white/20'
+            : 'text-[#121212] hover:bg-[#E0E0E0]'
         }`}
         title="Data quality & completeness"
         aria-label="Show data quality info"
@@ -54,32 +62,37 @@ export const ConfidenceBadge: React.FC<ConfidenceBadgeProps> = ({
         {children ?? 'ⓘ'}
       </Button>
       {isOpen && (
-        <div className="absolute z-50 mt-1 min-w-[180px] p-3 bg-white rounded-lg shadow-lg border border-gray-300 text-left">
-          <div className="text-xs font-medium text-gray-900 mb-2">
+        <div className="absolute z-50 mt-1 min-w-[200px] p-4 bg-white border-4 border-[#121212] shadow-bauhaus-lg text-left">
+          <div className="font-label text-[#121212] text-xs tracking-widest mb-2">
             Data quality & completeness
           </div>
           <div className="flex items-center justify-between gap-2 mb-2">
-            <span className="text-xs text-gray-700">Confidence: {pct}%</span>
-            <span className={`text-xs font-medium ${complete ? 'text-green-600' : 'text-amber-600'}`}>
+            <span className="text-sm font-bold text-[#121212]">Confidence: {pct}%</span>
+            <span
+              className={`text-xs font-bold uppercase ${
+                complete ? 'text-[#1040C0]' : 'text-[#D02020]'
+              }`}
+            >
               {complete ? 'Complete' : 'Incomplete'}
             </span>
           </div>
-          <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden mb-2">
+          <div className="w-full h-3 bg-[#E0E0E0] border-2 border-[#121212] overflow-hidden mb-2">
             <div
-              className={`h-full rounded-full ${
-                complete ? 'bg-green-500' : pct > 80 ? 'bg-yellow-500' : 'bg-red-500'
-              }`}
-              style={{ width: `${pct}%` }}
+              className="h-full transition-all duration-200"
+              style={{
+                width: `${pct}%`,
+                backgroundColor: getBarColor()
+              }}
             />
           </div>
           {!complete && missingFields.length > 0 && (
-            <div className="text-xs text-red-600 mt-1">
+            <div className="text-xs font-medium text-[#D02020] mt-1">
               Missing: {missingFields.slice(0, 3).join(', ')}
               {missingFields.length > 3 && ` +${missingFields.length - 3}`}
             </div>
           )}
           {generatedFields.length > 0 && (
-            <div className="text-xs text-amber-600 mt-1">
+            <div className="text-xs font-medium text-[#121212] mt-1">
               Generated: {generatedFields.slice(0, 2).join(', ')}
             </div>
           )}

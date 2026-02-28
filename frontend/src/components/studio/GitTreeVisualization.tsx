@@ -7,6 +7,18 @@ interface GitTreeVisualizationProps {
   currentBranch?: string;
 }
 
+/* Bauhaus palette for git visualization */
+const BAUHAUS = {
+  main: '#1040C0',
+  whatif: '#D02020',
+  selected: '#F0C020',
+  commit: '#121212',
+  commitHover: '#121212',
+  line: '#121212',
+  text: '#121212',
+  label: '#121212',
+};
+
 export const GitTreeVisualization: React.FC<GitTreeVisualizationProps> = ({
   onBranchSelect,
   onCommitSelect,
@@ -17,6 +29,10 @@ export const GitTreeVisualization: React.FC<GitTreeVisualizationProps> = ({
   const [hoveredCommit, setHoveredCommit] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setSelectedBranch(currentBranch);
+  }, [currentBranch]);
 
   useEffect(() => {
     loadGitData();
@@ -57,98 +73,73 @@ export const GitTreeVisualization: React.FC<GitTreeVisualizationProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Set canvas size
     canvas.width = container.clientWidth;
     canvas.height = Math.max(400, gitData.branches.length * 100);
-
-    // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Configuration
     const branchHeight = 80;
     const commitSize = 12;
     const commitSpacing = 120;
     const leftMargin = 150;
     const topMargin = 50;
 
-    // Colors
-    const colors = {
-      main: '#10b981',
-      whatif: '#3b82f6',
-      selected: '#f59e0b',
-      commit: '#6b7280',
-      commitHover: '#1f2937',
-      line: '#e5e7eb',
-      text: '#374151',
-      label: '#111827'
-    };
-
-    // Draw branches
     gitData.branches.forEach((branch, branchIndex) => {
       const y = topMargin + branchIndex * branchHeight;
       const isSelected = branch.name === selectedBranch;
       const isMain = branch.name === gitData.mainBranch;
-      const color = isSelected ? colors.selected : (isMain ? colors.main : colors.whatif);
+      const color = isSelected ? BAUHAUS.selected : (isMain ? BAUHAUS.main : BAUHAUS.whatif);
 
-      // Draw branch line
-      ctx.strokeStyle = color;
-      ctx.lineWidth = isSelected ? 3 : 2;
+      ctx.strokeStyle = BAUHAUS.line;
+      ctx.lineWidth = isSelected ? 4 : 2;
       ctx.beginPath();
       ctx.moveTo(leftMargin, y);
       ctx.lineTo(leftMargin + branch.commits.length * commitSpacing, y);
       ctx.stroke();
 
-      // Draw branch label
-      ctx.fillStyle = colors.label;
-      ctx.font = isSelected ? 'bold 14px Inter' : '14px Inter';
+      ctx.fillStyle = BAUHAUS.label;
+      ctx.font = isSelected ? 'bold 14px Outfit, sans-serif' : '14px Outfit, sans-serif';
       ctx.textAlign = 'right';
       ctx.fillText(branch.name.replace('what-if/', 'what-if/\\n'), leftMargin - 10, y + 5);
 
-      // Draw commits
       branch.commits.forEach((commit, commitIndex) => {
         const x = leftMargin + commitIndex * commitSpacing + commitSpacing / 2;
         const isHovered = commit.id === hoveredCommit;
 
-        // Draw commit circle
         ctx.beginPath();
         ctx.arc(x, y, commitSize, 0, 2 * Math.PI);
-        ctx.fillStyle = isHovered ? colors.commitHover : colors.commit;
+        ctx.fillStyle = isHovered ? color : BAUHAUS.commit;
         ctx.fill();
-        ctx.strokeStyle = color;
+        ctx.strokeStyle = BAUHAUS.line;
         ctx.lineWidth = 2;
         ctx.stroke();
 
-        // Draw commit message (on hover)
         if (isHovered) {
-          ctx.fillStyle = colors.text;
-          ctx.font = '12px Inter';
+          ctx.fillStyle = BAUHAUS.text;
+          ctx.font = '12px Outfit, sans-serif';
           ctx.textAlign = 'center';
-
-          // Background for readability
           const textWidth = ctx.measureText(commit.message).width;
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-          ctx.fillRect(x - textWidth/2 - 5, y + 20, textWidth + 10, 25);
-
-          ctx.fillStyle = colors.text;
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(x - textWidth / 2 - 6, y + 18, textWidth + 12, 28);
+          ctx.strokeStyle = BAUHAUS.line;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(x - textWidth / 2 - 6, y + 18, textWidth + 12, 28);
+          ctx.fillStyle = BAUHAUS.text;
           ctx.fillText(commit.message, x, y + 35);
         }
 
-        // Draw commit hash (abbreviated)
-        ctx.fillStyle = colors.text;
+        ctx.fillStyle = BAUHAUS.text;
         ctx.font = '10px monospace';
         ctx.textAlign = 'center';
         ctx.fillText(commit.id.substring(0, 7), x, y - 20);
       });
 
-      // Draw merge lines for branches
       if (branch.parent && branchIndex > 0) {
         const parentIndex = gitData.branches.findIndex(b => b.name === branch.parent);
         if (parentIndex >= 0) {
           const parentY = topMargin + parentIndex * branchHeight;
           const divergeX = leftMargin + Math.min(branch.commits.length - 1, 2) * commitSpacing;
-
-          ctx.strokeStyle = color;
-          ctx.lineWidth = 1;
+          ctx.strokeStyle = BAUHAUS.line;
+          ctx.lineWidth = 2;
           ctx.setLineDash([5, 5]);
           ctx.beginPath();
           ctx.moveTo(divergeX, parentY);
@@ -168,18 +159,15 @@ export const GitTreeVisualization: React.FC<GitTreeVisualizationProps> = ({
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    // Configuration (same as in drawGitTree)
     const branchHeight = 80;
     const commitSize = 12;
     const commitSpacing = 120;
     const leftMargin = 150;
     const topMargin = 50;
 
-    // Check which commit was clicked
     gitData.branches.forEach((branch, branchIndex) => {
       const branchY = topMargin + branchIndex * branchHeight;
 
-      // Check if click is on branch label area
       if (Math.abs(y - branchY) < 20 && x < leftMargin) {
         setSelectedBranch(branch.name);
         onBranchSelect?.(branch.name);
@@ -189,7 +177,6 @@ export const GitTreeVisualization: React.FC<GitTreeVisualizationProps> = ({
       branch.commits.forEach((commit, commitIndex) => {
         const commitX = leftMargin + commitIndex * commitSpacing + commitSpacing / 2;
         const distance = Math.sqrt(Math.pow(x - commitX, 2) + Math.pow(y - branchY, 2));
-
         if (distance <= commitSize) {
           onCommitSelect?.(commit, branch.name);
         }
@@ -205,7 +192,6 @@ export const GitTreeVisualization: React.FC<GitTreeVisualizationProps> = ({
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
 
-    // Configuration (same as in drawGitTree)
     const branchHeight = 80;
     const commitSize = 12;
     const commitSpacing = 120;
@@ -214,14 +200,11 @@ export const GitTreeVisualization: React.FC<GitTreeVisualizationProps> = ({
 
     let foundHover = false;
 
-    // Check which commit is being hovered
     gitData.branches.forEach((branch, branchIndex) => {
       const branchY = topMargin + branchIndex * branchHeight;
-
       branch.commits.forEach((commit, commitIndex) => {
         const commitX = leftMargin + commitIndex * commitSpacing + commitSpacing / 2;
         const distance = Math.sqrt(Math.pow(x - commitX, 2) + Math.pow(y - branchY, 2));
-
         if (distance <= commitSize) {
           setHoveredCommit(commit.id);
           canvas.style.cursor = 'pointer';
@@ -236,34 +219,13 @@ export const GitTreeVisualization: React.FC<GitTreeVisualizationProps> = ({
     }
   };
 
-  // Unused for now - would be used for actual git operations
-  // const checkoutBranch = async (branchName: string) => {
-  //   try {
-  //     const response = await fetch('/api/studio/git-checkout', {
-  //       method: 'POST',
-  //       headers: { 'Content-Type': 'application/json' },
-  //       body: JSON.stringify({ branch: branchName })
-  //     });
-
-  //     if (response.ok) {
-  //       setSelectedBranch(branchName);
-  //       onBranchSelect?.(branchName);
-  //     }
-  //   } catch (error) {
-  //     console.error('Failed to checkout branch:', error);
-  //   }
-  // };
-
   return (
-    <div className="w-full bg-white rounded-lg shadow-lg p-4">
+    <div className="w-full">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-semibold text-gray-800">Timeline Explorer</h2>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-600">Current Branch:</span>
-          <span className="px-2 py-1 bg-green-100 text-green-800 rounded-md text-sm font-medium">
-            {selectedBranch}
-          </span>
-        </div>
+        <span className="text-sm font-bold text-[#121212] uppercase tracking-widest">Current Branch:</span>
+        <span className="px-3 py-1.5 bg-[#121212] text-[#F0C020] border-2 border-[#121212] font-bold uppercase text-sm">
+          {selectedBranch}
+        </span>
       </div>
 
       <div ref={containerRef} className="relative overflow-x-auto">
@@ -272,22 +234,22 @@ export const GitTreeVisualization: React.FC<GitTreeVisualizationProps> = ({
           onClick={handleCanvasClick}
           onMouseMove={handleCanvasHover}
           onMouseLeave={() => setHoveredCommit(null)}
-          className="border border-gray-200 rounded"
+          className="border-4 border-[#121212] bg-white shadow-bauhaus"
         />
       </div>
 
-      <div className="mt-4 flex items-center gap-4 text-sm">
+      <div className="mt-4 flex flex-wrap items-center gap-6 text-sm font-bold uppercase tracking-widest text-[#121212]">
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-          <span className="text-gray-600">Main Timeline</span>
+          <div className="w-4 h-4 rounded-none bg-[#1040C0] border-2 border-[#121212]" />
+          <span>Main Timeline</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-          <span className="text-gray-600">What-If Branch</span>
+          <div className="w-4 h-4 rounded-full bg-[#D02020] border-2 border-[#121212]" />
+          <span>What-If Branch</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
-          <span className="text-gray-600">Selected</span>
+          <div className="w-4 h-4 bg-[#F0C020] border-2 border-[#121212]" style={{ transform: 'rotate(45deg)' }} />
+          <span>Selected</span>
         </div>
       </div>
     </div>

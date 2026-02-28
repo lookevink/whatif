@@ -1,8 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as BABYLON from '@babylonjs/core';
+import { PointerDragBehavior } from '@babylonjs/core/Behaviors/Meshes/pointerDragBehavior';
 import '@babylonjs/loaders/glTF';
+import { Button } from '@/components/ui/button';
 import type { Scene, CharacterModel, PropModel, LocationModel, LightingConfig } from '../../lib/studio/types';
 import { ConfidenceBadge } from './ConfidenceBadge';
+
+const PROJECT_NAME = 'default';
 
 interface BabylonSceneViewerProps {
   scene: Scene;
@@ -26,6 +30,9 @@ export const BabylonSceneViewer: React.FC<BabylonSceneViewerProps> = ({
   const sceneRef = useRef<BABYLON.Scene | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMessage, setLoadingMessage] = useState('Initializing scene...');
+  const [inspectorVisible, setInspectorVisible] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -66,14 +73,42 @@ export const BabylonSceneViewer: React.FC<BabylonSceneViewerProps> = ({
     }
   }, [studioScene, characters, props, location]);
 
+  // Apply camera config when scene changes (e.g. camera.yaml viewer section)
+  useEffect(() => {
+    const babylonScene = sceneRef.current;
+    if (!babylonScene) return;
+    const cam = babylonScene.activeCamera as BABYLON.ArcRotateCamera;
+    if (!cam || !(cam instanceof BABYLON.ArcRotateCamera)) return;
+
+    const viewer = (studioScene.camera as any)?.viewer;
+    if (viewer) {
+      if (typeof viewer.alpha === 'number') cam.alpha = viewer.alpha;
+      if (typeof viewer.beta === 'number') cam.beta = viewer.beta;
+      if (typeof viewer.radius === 'number') cam.radius = viewer.radius;
+      const t = viewer.target;
+      if (Array.isArray(t) && t.length >= 3) {
+        cam.setTarget(new BABYLON.Vector3(t[0], t[1], t[2]));
+      }
+    }
+  }, [studioScene]);
+
   const setupScene = async (babylonScene: BABYLON.Scene) => {
-    // Set up camera
+    // Set up camera — use scene.camera.viewer if available
+    const viewer = (studioScene.camera as any)?.viewer;
+    const alpha = typeof viewer?.alpha === 'number' ? viewer.alpha : -Math.PI / 2;
+    const beta = typeof viewer?.beta === 'number' ? viewer.beta : Math.PI / 3;
+    const radius = typeof viewer?.radius === 'number' ? viewer.radius : 12;
+    const targetArr = viewer?.target;
+    const target = Array.isArray(targetArr) && targetArr.length >= 3
+      ? new BABYLON.Vector3(targetArr[0], targetArr[1], targetArr[2])
+      : BABYLON.Vector3.Zero();
+
     const camera = new BABYLON.ArcRotateCamera(
       'camera',
-      -Math.PI / 2,
-      Math.PI / 3,
-      10,
-      BABYLON.Vector3.Zero(),
+      alpha,
+      beta,
+      radius,
+      target,
       babylonScene
     );
     camera.attachControl(canvasRef.current, true);
@@ -204,6 +239,8 @@ export const BabylonSceneViewer: React.FC<BabylonSceneViewerProps> = ({
       if (studioScene.blocking) {
         applyBlocking(babylonScene, studioScene.blocking);
       }
+
+      attachDragToCharacters(babylonScene);
 
       setLoading(false);
     } catch (error) {
@@ -396,21 +433,39 @@ export const BabylonSceneViewer: React.FC<BabylonSceneViewerProps> = ({
     sphere.material = mat;
   };
 
-  const applyBlocking = (babylonScene: BABYLON.Scene, blocking: any) => {
-    // Apply character positions from blocking data
-    if (blocking.characterMovements) {
-      blocking.characterMovements.forEach((movement: any) => {
-        const mesh = babylonScene.getMeshByName(`character_${movement.character}`);
-        if (mesh && movement.movements.length > 0) {
-          const lastMovement = movement.movements[movement.movements.length - 1];
-          if (blocking.space?.keyPositions?.[lastMovement.position]) {
-            const pos = blocking.space.keyPositions[lastMovement.position];
-            mesh.position.x = pos.x;
-            mesh.position.z = pos.y; // Using y as z for 2D to 3D mapping
-          }
-        }
+  const attachDragToCharacters = (babylonScene: BABYLON.Scene) => {
+    babylonScene.meshes.forEach((mesh) => {
+      if (!mesh.name.startsWith('character_')) return;
+
+      const dragBehavior = new PointerDragBehavior({
+        dragPlaneNormal: new BABYLON.Vector3(0, 1, 0)
       });
-    }
+      dragBehavior.moveAttached = true;
+      dragBehavior.detachCameraControls = true;
+      mesh.addBehavior(dragBehavior);
+    });
+  };
+
+  const applyBlocking = (babylonScene: BABYLON.Scene, blocking: any) => {
+    const keyPositions = blocking.space?.keyPositions ?? blocking.space?.key_positions;
+    const movements = blocking.characterMovements ?? blocking.blocking;
+    if (!keyPositions || !movements?.length) return;
+
+    const charIds = new Set(characters.map((c) => c.id));
+    const blockedCount = new Set(movements.map((m: any) => m.character)).size;
+    if (blockedCount < charIds.size) return; // Incomplete blocking — keep default spread
+
+    movements.forEach((movement: any) => {
+      const mesh = babylonScene.getMeshByName(`character_${movement.character}`);
+      if (mesh && movement.movements?.length > 0) {
+        const lastMovement = movement.movements[movement.movements.length - 1];
+        const pos = keyPositions[lastMovement.position];
+        if (pos) {
+          mesh.position.x = pos.x;
+          mesh.position.z = pos.y;
+        }
+      }
+    });
   };
 
   const colorTempToRGB = (kelvin: number): BABYLON.Color3 => {
@@ -454,6 +509,87 @@ export const BabylonSceneViewer: React.FC<BabylonSceneViewerProps> = ({
     }
   };
 
+  const toggleInspector = async () => {
+    const babylonScene = sceneRef.current;
+    if (!babylonScene) return;
+    if (inspectorVisible) {
+      babylonScene.debugLayer.hide();
+      setInspectorVisible(false);
+    } else {
+      await import('@babylonjs/core/Debug/debugLayer');
+      babylonScene.debugLayer.show({ overlay: true });
+      setInspectorVisible(true);
+    }
+  };
+
+  const extractSceneState = (babylonScene: BABYLON.Scene): { blocking: Record<string, unknown>; lighting: Record<string, unknown> } => {
+    const keyPositions: Record<string, { x: number; y: number }> = {};
+    const characterMovements: Array<{ character: string; movements: Array<{ at: string; position: string }> }> = [];
+
+    babylonScene.meshes.forEach((mesh) => {
+      if (mesh.name.startsWith('character_')) {
+        const charId = mesh.name.replace('character_', '');
+        const posKey = `char_${charId}`;
+        const pos = mesh.absolutePosition;
+        keyPositions[posKey] = { x: pos.x, y: pos.z };
+        characterMovements.push({
+          character: charId,
+          movements: [{ at: 'shot_001', position: posKey }]
+        });
+      }
+    });
+
+    const blocking = {
+      space: { key_positions: keyPositions },
+      characterMovements
+    };
+
+    const keyLight = babylonScene.getLightByName('keyLight') as BABYLON.DirectionalLight;
+    const hemisphereLight = babylonScene.getLightByName('hemisphereLight') as BABYLON.HemisphericLight;
+    const lighting: Record<string, unknown> = {
+      keyLight: keyLight ? {
+        intensity: keyLight.intensity,
+        direction: keyLight.direction ? { x: keyLight.direction.x, y: keyLight.direction.y, z: keyLight.direction.z } : undefined
+      } : undefined,
+      hemisphere: hemisphereLight ? {
+        intensity: hemisphereLight.intensity
+      } : undefined,
+      mood: 'neutral',
+      contrastRatio: '3:1'
+    };
+
+    return { blocking, lighting };
+  };
+
+  const saveArrangement = async () => {
+    const babylonScene = sceneRef.current;
+    if (!babylonScene || !studioScene?.id) return;
+
+    setSaving(true);
+    setSaveMessage(null);
+    try {
+      const { blocking, lighting } = extractSceneState(babylonScene);
+      const act = studioScene.act || 'act1';
+      const res = await fetch(`/api/studio/projects/${PROJECT_NAME}/scenes/${studioScene.id}/arrangement?act=${act}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blocking, lighting })
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || 'Save failed');
+      }
+      setSaveMessage('Saved to blocking.yaml & lighting.yaml');
+      setTimeout(() => setSaveMessage(null), 3000);
+    } catch (err) {
+      setSaveMessage(err instanceof Error ? err.message : 'Save failed');
+      setTimeout(() => setSaveMessage(null), 5000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className={`relative w-full h-full bg-gray-900 overflow-hidden ${fullscreen ? 'rounded-none' : 'rounded-lg'}`}>
       <canvas
@@ -484,8 +620,34 @@ export const BabylonSceneViewer: React.FC<BabylonSceneViewerProps> = ({
         )}
       </div>
 
-      <div className="absolute top-4 right-4 bg-black bg-opacity-50 text-white p-2 rounded">
-        <p className="text-xs">Drag to rotate • Scroll to zoom</p>
+      <div className="absolute top-4 right-4 flex flex-col gap-2">
+        <div className="bg-black bg-opacity-50 text-white p-2 rounded">
+          <p className="text-xs">Drag to rotate • Scroll to zoom • Click &amp; drag characters to move</p>
+        </div>
+        <div className="flex flex-col gap-1">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={toggleInspector}
+            className="text-xs"
+          >
+            {inspectorVisible ? 'Hide Inspector' : 'Show Inspector'}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={saveArrangement}
+            disabled={saving || loading}
+            className="text-xs"
+          >
+            {saving ? 'Saving...' : 'Save Arrangement'}
+          </Button>
+          {saveMessage && (
+            <p className={`text-xs mt-1 ${saveMessage.startsWith('Saved') ? 'text-green-400' : 'text-red-400'}`}>
+              {saveMessage}
+            </p>
+          )}
+        </div>
       </div>
     </div>
   );

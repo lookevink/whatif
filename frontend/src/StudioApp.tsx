@@ -6,6 +6,13 @@ import { BabylonSceneViewer } from './components/studio/BabylonSceneViewer';
 import { StoryboardGenerator } from './components/studio/StoryboardGenerator';
 import { WhatIfExplorer } from './components/studio/WhatIfExplorer';
 import type { Scene, Commit, CharacterModel, LocationModel, PropModel } from './lib/studio/types';
+import { CHARACTER_SPACING, CHARACTER_BASELINE_Y, CHARACTER_DEPTH_SPACING } from './lib/studio/constants';
+
+const PROJECT_ROOT = '/api/studio/projects/default';
+
+function toGlbUrl(projectRelativePath: string): string {
+  return `${PROJECT_ROOT}/files/${projectRelativePath}`;
+}
 
 export const StudioApp: React.FC = () => {
   const [currentBranch, setCurrentBranch] = useState<string>('main');
@@ -38,16 +45,32 @@ export const StudioApp: React.FC = () => {
     setSelectedScene(scene);
 
     // Convert scene data to Babylon models
-    const characters: CharacterModel[] = scene.characters?.map((char, idx) => ({
-      id: typeof char === 'string' ? char : char.id,
-      name: typeof char === 'string' ? char : char.name,
-      position: { x: idx * 2 - 2, y: 0, z: 0 },
-      rotation: { x: 0, y: 0, z: 0 },
-      fallbackModel: 'capsule'
-    })) || [];
+    const loc = scene.location;
+    const locId = typeof loc === 'string' ? loc : loc?.id || 'default';
+    const glbModel = typeof loc === 'object' && loc?.glbModel;
+
+    const charCount = scene.characters?.length ?? 1;
+    const centerOffset = (CHARACTER_SPACING * (charCount - 1)) / 2;
+    const depthCenter = ((charCount - 1) * CHARACTER_DEPTH_SPACING) / 2;
+    const characters: CharacterModel[] = scene.characters?.map((char, idx) => {
+      const c = typeof char === 'string' ? { id: char, name: char } : char;
+      return {
+        id: c.id,
+        name: c.name,
+        glbPath: c.visual?.glbModel ? toGlbUrl(c.visual.glbModel) : undefined,
+        position: {
+          x: idx * CHARACTER_SPACING - centerOffset,
+          y: CHARACTER_BASELINE_Y,
+          z: idx * CHARACTER_DEPTH_SPACING - depthCenter
+        },
+        rotation: { x: 0, y: 0, z: 0 },
+        fallbackModel: 'capsule' as const
+      };
+    }) || [];
 
     const location: LocationModel = {
-      id: typeof scene.location === 'string' ? scene.location : scene.location?.id || 'default',
+      id: locId,
+      glbPath: glbModel ? toGlbUrl(glbModel) : undefined,
       ambientLight: {
         intensity: 0.5,
         color: '#ffffff'

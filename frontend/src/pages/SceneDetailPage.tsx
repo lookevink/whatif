@@ -6,8 +6,10 @@ import { BabylonSceneViewer } from '../components/studio/BabylonSceneViewer';
 import { StoryboardGenerator } from '../components/studio/StoryboardGenerator';
 import { WhatIfExplorer } from '../components/studio/WhatIfExplorer';
 import { ConfidenceBadge } from '../components/studio/ConfidenceBadge';
+import { BauhausLogo } from '../components/studio/BauhausLogo';
 import { StudioDataLoader } from '../lib/studio/data-loader';
 import type { Scene, CharacterModel, PropModel, LocationModel } from '../lib/studio/types';
+import { CHARACTER_SPACING, CHARACTER_BASELINE_Y, CHARACTER_DEPTH_SPACING } from '../lib/studio/constants';
 
 const PROJECT_ROOT = '/api/studio/projects/default';
 
@@ -30,13 +32,20 @@ export const SceneDetailPage: React.FC = () => {
     const loc = scene.location;
     const locId = typeof loc === 'string' ? loc : loc?.id || 'default';
     const glbModel = typeof loc === 'object' && loc?.glbModel;
+    const charCount = scene.characters?.length ?? 1;
+    const centerOffset = (CHARACTER_SPACING * (charCount - 1)) / 2;
+    const depthCenter = ((charCount - 1) * CHARACTER_DEPTH_SPACING) / 2;
     const characters: CharacterModel[] = scene.characters?.map((char, idx) => {
       const c = typeof char === 'string' ? { id: char, name: char } : char;
       return {
         id: c.id,
         name: c.name,
         glbPath: c.visual?.glbModel ? toGlbUrl(c.visual.glbModel) : undefined,
-        position: { x: idx * 2 - 2, y: 0, z: 0 },
+        position: {
+          x: idx * CHARACTER_SPACING - centerOffset,
+          y: CHARACTER_BASELINE_Y,
+          z: idx * CHARACTER_DEPTH_SPACING - depthCenter
+        },
         rotation: { x: 0, y: 0, z: 0 },
         fallbackModel: 'capsule'
       };
@@ -49,7 +58,6 @@ export const SceneDetailPage: React.FC = () => {
     return { characters, props: [], location };
   }, [scene]);
 
-  // Load scene when no state (e.g. refresh or direct URL)
   useEffect(() => {
     if (!scene && sceneId) {
       const loader = new StudioDataLoader(PROJECT_ROOT);
@@ -69,88 +77,103 @@ export const SceneDetailPage: React.FC = () => {
   };
 
   if (loading || !scene) return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500" />
+    <div className="min-h-screen flex items-center justify-center bg-[#F0F0F0]">
+      <div className="flex flex-col items-center gap-4">
+        <div className="w-12 h-12 border-4 border-[#121212] border-t-[#D02020] rounded-full animate-spin" />
+        <p className="font-bold uppercase tracking-widest text-[#121212]">Loading scene</p>
+      </div>
     </div>
   );
 
   return (
     <>
-      <div className="flex flex-col min-h-screen bg-gray-50">
-        <header className="bg-white shadow-sm border-b border-gray-200">
-          <div className="px-6 py-3 flex items-center justify-between">
+      <div className="flex flex-col min-h-screen bg-[#F0F0F0]">
+        {/* Header – Red color block */}
+        <header className="bg-[#D02020] border-b-4 border-[#121212] shadow-bauhaus-md">
+          <div className="px-4 sm:px-6 py-3 flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 onClick={() => navigate('/')}
-                className="text-gray-600 hover:text-gray-800"
+                className="bg-white text-[#121212] border-[#121212] shadow-bauhaus-sm"
               >
                 ← Back to Scenes
               </Button>
-              <h1 className="text-xl font-bold text-gray-900">Scene: {scene.id}</h1>
-              {scene._status && (
-                <ConfidenceBadge
-                  confidence={scene._status.confidence}
-                  missingFields={scene._status.missingFields}
-                  generatedFields={scene._status.generatedFields}
-                  complete={scene._status.complete}
-                />
-              )}
+              <div className="flex items-center gap-3">
+                <BauhausLogo size="sm" />
+                <h1 className="font-subheading text-white leading-tight">
+                  Scene: {scene.id}
+                </h1>
+                {scene._status && (
+                  <ConfidenceBadge
+                    confidence={scene._status.confidence}
+                    missingFields={scene._status.missingFields}
+                    generatedFields={scene._status.generatedFields}
+                    complete={scene._status.complete}
+                    dark
+                  />
+                )}
+              </div>
             </div>
           </div>
         </header>
 
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex flex-1 overflow-hidden">
-            {/* Scene dialogue & directions */}
+            {/* Dialogue panel – White card */}
             {scene.dialogue && scene.dialogue.length > 0 && (
-              <div className="w-80 flex-shrink-0 border-r border-gray-200 bg-white overflow-auto">
-                <div className="p-4">
-                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Dialogue</h3>
-                  <div className="space-y-2 text-sm">
+              <div className="w-80 flex-shrink-0 border-r-4 border-[#121212] bg-white overflow-auto">
+                <div className="p-4 sm:p-6">
+                  <h3 className="font-label text-[#121212] mb-3 tracking-widest text-sm">Dialogue</h3>
+                  <div className="space-y-3 text-sm">
                     {scene.dialogue.map((line, idx) => (
-                      <div key={idx} className="border-l-2 border-gray-300 pl-3">
-                        <span className="font-medium text-gray-800">{line.character}:</span>{' '}
-                        <span className="text-gray-600">{line.line}</span>
+                      <div key={idx} className="border-l-4 border-[#1040C0] pl-3">
+                        <span className="font-bold text-[#121212] uppercase">{line.character}:</span>{' '}
+                        <span className="text-[#121212]/90 font-medium">{line.line}</span>
                         {line.delivery && (
-                          <span className="block text-xs text-gray-500 italic mt-0.5">{line.delivery}</span>
+                          <span className="block text-xs text-[#121212]/60 italic mt-0.5 font-medium">{line.delivery}</span>
                         )}
                       </div>
                     ))}
                   </div>
                   {scene.directions && (
                     <>
-                      <h3 className="text-sm font-semibold text-gray-700 mt-4 mb-2">Directions</h3>
-                      <p className="text-sm text-gray-600 whitespace-pre-wrap">{scene.directions}</p>
+                      <h3 className="font-label text-[#121212] mt-6 mb-2 tracking-widest text-sm">Directions</h3>
+                      <p className="text-sm text-[#121212]/90 font-medium whitespace-pre-wrap leading-relaxed">{scene.directions}</p>
                     </>
                   )}
                 </div>
               </div>
             )}
-            {/* Storyboard panel */}
-            <div className="flex-1 overflow-auto p-6">
+
+            {/* Storyboard – Off-white section */}
+            <div className="flex-1 overflow-auto p-4 sm:p-6 bg-[#F0F0F0]">
               <StoryboardGenerator scene={scene} />
             </div>
           </div>
 
-          {/* Round What If button */}
+          {/* What If FAB – Yellow, geometric */}
           <Button
-            size="lg"
+            size="icon-lg"
+            variant="yellow"
+            shape="pill"
             onClick={() => setShowWhatIf(true)}
-            className="fixed bottom-8 right-8 w-14 h-14 rounded-full shadow-lg transition-all hover:scale-110 z-40"
+            className="fixed bottom-8 right-8 shadow-bauhaus-lg hover:-translate-y-1 transition-all duration-200 z-40"
             title="What If..."
+            aria-label="Open What-If Explorer"
           >
-            <CircleHelp className="size-6" />
+            <CircleHelp className="size-8" strokeWidth={3} />
           </Button>
 
-          {/* 3D Viewer entry - small preview / enter fullscreen */}
-          <div className="border-t border-gray-200 bg-white p-4">
+          {/* 3D Preview bar – Blue accent */}
+          <div className="border-t-4 border-[#121212] bg-[#1040C0] p-4">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">3D Preview</span>
+              <span className="font-bold uppercase tracking-widest text-white text-sm">3D Preview</span>
               <Button
+                variant="outline"
                 onClick={() => setViewerFullscreen(true)}
-                className="bg-gray-800 hover:bg-gray-700"
+                className="bg-white text-[#1040C0] border-2 border-[#121212] shadow-bauhaus hover:bg-white/90"
               >
                 Enter Fullscreen 3D
               </Button>
@@ -159,28 +182,28 @@ export const SceneDetailPage: React.FC = () => {
         </div>
       </div>
 
-      {/* What If panel - slides in when FAB clicked */}
+      {/* What If panel – slides in */}
       {showWhatIf && (
         <div className="fixed inset-0 z-50 flex">
           <div
-            className="absolute inset-0 bg-black/40"
+            className="absolute inset-0 bg-[#121212]/60"
             onClick={() => setShowWhatIf(false)}
             role="button"
             tabIndex={0}
             onKeyDown={(e) => e.key === 'Escape' && setShowWhatIf(false)}
           />
-          <div className="relative ml-auto w-full max-w-lg bg-white shadow-2xl overflow-y-auto animate-slide-in">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-800">What-If Explorer</h2>
+          <div className="relative ml-auto w-full max-w-lg bg-white border-l-4 border-[#121212] shadow-bauhaus-lg overflow-y-auto animate-slide-in">
+            <div className="sticky top-0 bg-[#F0C020] border-b-4 border-[#121212] px-6 py-4 flex items-center justify-between">
+              <h2 className="font-subheading text-[#121212]">What-If Explorer</h2>
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => setShowWhatIf(false)}
-                className="text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+                className="text-[#121212] hover:bg-[#121212]/10"
                 aria-label="Close"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </Button>
             </div>
@@ -198,12 +221,12 @@ export const SceneDetailPage: React.FC = () => {
 
       {/* Fullscreen 3D Viewer */}
       {viewerFullscreen && (
-        <div className="fixed inset-0 z-50 bg-black">
+        <div className="fixed inset-0 z-50 bg-[#121212]">
           <div className="absolute top-4 right-4 z-10">
             <Button
-              variant="secondary"
+              variant="outline"
               onClick={() => setViewerFullscreen(false)}
-              className="bg-white/90 hover:bg-white text-gray-800 shadow-lg"
+              className="bg-white text-[#121212] border-2 border-[#121212] shadow-bauhaus hover:bg-[#E0E0E0]"
             >
               Exit Fullscreen
             </Button>

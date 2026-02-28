@@ -1,27 +1,35 @@
 @import "tailwindcss";
 
-/* shadcn theme (neutral base) */
+/* Bauhaus Design System – Design Tokens */
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  /* Colors */
+  --background: #F0F0F0;
+  --foreground: #121212;
+  --primary-red: #D02020;
+  --primary-blue: #1040C0;
+  --primary-yellow: #F0C020;
+  --border: #121212;
+  --muted: #E0E0E0;
+
+  /* Legacy shadcn mapping for Button etc – Bauhaus overrides */
+  --radius: 0;
+  --card: #ffffff;
+  --card-foreground: #121212;
+  --popover: #ffffff;
+  --popover-foreground: #121212;
+  --primary: #D02020;
+  --primary-foreground: #ffffff;
+  --secondary: #1040C0;
+  --secondary-foreground: #ffffff;
+  --muted-background: #E0E0E0;
+  --muted-foreground: #374151;
+  --accent: #E0E0E0;
+  --accent-foreground: #121212;
+  --destructive: #D02020;
+  --destructive-foreground: #ffffff;
+  --border-color: #121212;
+  --input: #E0E0E0;
+  --ring: #121212;
 }
 
 @theme inline {
@@ -35,26 +43,25 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
+  --color-muted: var(--muted-background);
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
-  --color-border: var(--border);
+  --color-border: var(--border-color);
   --color-input: var(--input);
   --color-ring: var(--ring);
 }
 
+/* Global typography & base */
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: 'Outfit', system-ui, sans-serif;
   line-height: 1.5;
-  font-weight: 400;
-
+  font-weight: 500;
   color-scheme: light;
-  color: #213547;
-  background-color: #ffffff;
-
+  color: #121212;
+  background-color: #F0F0F0;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -63,11 +70,11 @@
 
 a {
   font-weight: 500;
-  color: #646cff;
+  color: var(--primary-blue);
   text-decoration: inherit;
 }
 a:hover {
-  color: #535bf2;
+  color: var(--primary-red);
 }
 
 body {
@@ -76,22 +83,69 @@ body {
   min-height: 100vh;
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+/* Bauhaus typography scale */
+.font-display {
+  font-size: 2.25rem;
+  line-height: 0.9;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+}
+@media (min-width: 640px) {
+  .font-display { font-size: 3.75rem; }
+}
+@media (min-width: 1024px) {
+  .font-display { font-size: 6rem; }
 }
 
-body {
-  background-color: #ffffff;
+.font-subheading {
+  font-size: 1.5rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+@media (min-width: 640px) {
+  .font-subheading { font-size: 1.875rem; }
+}
+@media (min-width: 1024px) {
+  .font-subheading { font-size: 2.25rem; }
+}
+
+.font-label {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* Hard offset shadows – Bauhaus layering */
+.shadow-bauhaus-sm {
+  box-shadow: 3px 3px 0 0 #121212;
+}
+.shadow-bauhaus {
+  box-shadow: 4px 4px 0 0 #121212;
+}
+.shadow-bauhaus-md {
+  box-shadow: 6px 6px 0 0 #121212;
+}
+.shadow-bauhaus-lg {
+  box-shadow: 8px 8px 0 0 #121212;
+}
+
+/* Button press effect */
+.press-effect:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
+/* Dot grid background pattern */
+.bg-dot-grid {
+  background-image: radial-gradient(#121212 2px, transparent 2px);
+  background-size: 20px 20px;
+  background-position: 0 0;
 }
 
 @keyframes slide-in-right {
-  from {
-    transform: translateX(100%);
-  }
-  to {
-    transform: translateX(0);
-  }
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
 }
 
 .animate-slide-in {

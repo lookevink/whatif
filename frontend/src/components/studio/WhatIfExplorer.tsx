@@ -10,7 +10,12 @@ interface WhatIfExplorerProps {
   embedded?: boolean;
 }
 
-export const WhatIfExplorer: React.FC<WhatIfExplorerProps> = ({ scene, branch, onQuery, embedded = false }) => {
+export const WhatIfExplorer: React.FC<WhatIfExplorerProps> = ({
+  scene,
+  branch,
+  onQuery,
+  embedded = false
+}) => {
   const [query, setQuery] = useState('');
   const [processing, setProcessing] = useState(false);
   const [proposedChanges, setProposedChanges] = useState<ProposedChange[]>([]);
@@ -27,17 +32,11 @@ export const WhatIfExplorer: React.FC<WhatIfExplorerProps> = ({ scene, branch, o
 
   const handleSubmitQuery = async () => {
     if (!query.trim()) return;
-
     setProcessing(true);
-
     try {
-      // This would call your AI backend
       const response = await processWhatIfQuery(query, scene);
-
       setProposedChanges(response.changes);
       setBranchName(generateBranchName(query));
-
-      // Add to history
       const newQuery: WhatIfQuery = {
         id: `query_${Date.now()}`,
         query,
@@ -48,7 +47,6 @@ export const WhatIfExplorer: React.FC<WhatIfExplorerProps> = ({ scene, branch, o
         status: 'complete'
       };
       setQueryHistory([newQuery, ...queryHistory]);
-
     } catch (error) {
       console.error('Failed to process what-if query:', error);
     } finally {
@@ -57,10 +55,7 @@ export const WhatIfExplorer: React.FC<WhatIfExplorerProps> = ({ scene, branch, o
   };
 
   const processWhatIfQuery = async (query: string, scene: Scene): Promise<{ changes: ProposedChange[] }> => {
-    // Mock processing - would call AI backend
     await new Promise(resolve => setTimeout(resolve, 2000));
-
-    // Generate mock changes based on query
     const changes: ProposedChange[] = [];
 
     if (query.toLowerCase().includes('confront')) {
@@ -91,7 +86,6 @@ export const WhatIfExplorer: React.FC<WhatIfExplorerProps> = ({ scene, branch, o
       });
     }
 
-    // Add a general change
     changes.push({
       path: `scenes/${scene.id}/blocking`,
       originalValue: scene.blocking,
@@ -116,7 +110,6 @@ export const WhatIfExplorer: React.FC<WhatIfExplorerProps> = ({ scene, branch, o
   };
 
   const generateBranchName = (query: string): string => {
-    // Simple branch name generation
     const simplified = query
       .toLowerCase()
       .replace(/what if /gi, '')
@@ -124,17 +117,13 @@ export const WhatIfExplorer: React.FC<WhatIfExplorerProps> = ({ scene, branch, o
       .split(' ')
       .slice(0, 4)
       .join('-');
-
     return `what-if/${simplified}-${Date.now().toString(36)}`;
   };
 
   const applyChanges = async () => {
     if (proposedChanges.length === 0) return;
-
     setProcessing(true);
-
     try {
-      // This would create a new git branch and apply changes
       const response = await fetch('/api/studio/apply-whatif', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -145,10 +134,8 @@ export const WhatIfExplorer: React.FC<WhatIfExplorerProps> = ({ scene, branch, o
           sceneId: scene.id
         })
       });
-
       if (response.ok) {
         onQuery(query);
-        // Clear after successful application
         setQuery('');
         setProposedChanges([]);
       }
@@ -160,29 +147,29 @@ export const WhatIfExplorer: React.FC<WhatIfExplorerProps> = ({ scene, branch, o
   };
 
   return (
-    <div className={`h-full flex flex-col ${embedded ? '' : 'bg-white rounded-lg shadow-lg'}`}>
-      {/* Query Input */}
-      <div className={embedded ? 'pt-0' : 'p-4 border-b border-gray-200'}>
+    <div className={`h-full flex flex-col ${embedded ? '' : 'bg-white border-4 border-[#121212] shadow-bauhaus-lg'}`}>
+      <div className={embedded ? 'pt-0' : 'p-4 sm:p-6 border-b-4 border-[#121212]'}>
         {!embedded && (
-          <h2 className="text-xl font-semibold text-gray-800 mb-4">What-If Explorer</h2>
+          <h2 className="font-subheading text-[#121212] mb-4">What-If Explorer</h2>
         )}
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Ask a "What If" Question
+            <label className="block font-label text-[#121212] text-xs tracking-widest mb-2">
+              Ask a &quot;What If&quot; Question
             </label>
             <div className="flex gap-2">
               <input
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSubmitQuery()}
+                onKeyDown={(e) => e.key === 'Enter' && handleSubmitQuery()}
                 placeholder="What if Marcus confronts Jane about the letter?"
-                className="flex-1 px-4 py-2 border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="flex-1 px-4 py-2 border-2 border-[#121212] bg-white font-medium focus:outline-none focus:ring-2 focus:ring-[#121212]"
                 disabled={processing}
               />
               <Button
+                variant="default"
                 onClick={handleSubmitQuery}
                 disabled={processing || !query.trim()}
               >
@@ -191,17 +178,17 @@ export const WhatIfExplorer: React.FC<WhatIfExplorerProps> = ({ scene, branch, o
             </div>
           </div>
 
-          {/* Example Queries */}
           <div>
-            <p className="text-sm text-gray-600 mb-2">Try these examples:</p>
+            <p className="font-label text-[#121212] text-xs tracking-widest mb-2">Try these examples</p>
             <div className="flex flex-wrap gap-2">
               {exampleQueries.map((example, idx) => (
                 <Button
                   key={idx}
                   variant="outline"
                   size="xs"
+                  shape="pill"
                   onClick={() => setQuery(example)}
-                  className="rounded-full text-xs"
+                  className="text-xs"
                 >
                   {example}
                 </Button>
@@ -211,43 +198,47 @@ export const WhatIfExplorer: React.FC<WhatIfExplorerProps> = ({ scene, branch, o
         </div>
       </div>
 
-      {/* Results Area */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
         {proposedChanges.length > 0 && (
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-800">Proposed Changes</h3>
+          <div className="mb-8">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+              <h3 className="font-subheading text-[#121212] text-lg sm:text-xl">Proposed Changes</h3>
               <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-600">New branch:</span>
-                <code className="px-2 py-1 bg-gray-800 text-white text-sm rounded">{branchName}</code>
+                <span className="font-label text-[#121212] text-xs">New branch:</span>
+                <code className="px-2 py-1 bg-[#121212] text-[#F0C020] font-mono text-sm font-bold">
+                  {branchName}
+                </code>
               </div>
             </div>
 
             <div className="space-y-4">
               {proposedChanges.map((change, idx) => (
-                <div key={idx} className="border border-gray-200 rounded-lg p-4">
-                  <div className="flex items-start justify-between mb-2">
+                <div
+                  key={idx}
+                  className="border-4 border-[#121212] bg-white shadow-bauhaus p-4 sm:p-6"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-3">
                     <div>
-                      <p className="text-sm font-medium text-gray-900">
+                      <p className="font-bold text-[#121212] uppercase text-sm">
                         Change #{idx + 1}: {change.path.split('/').pop()}
                       </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Path: <code className="bg-gray-50 px-1">{change.path}</code>
+                      <p className="text-xs text-[#121212]/70 mt-1 font-medium">
+                        Path: <code className="bg-[#E0E0E0] px-1">{change.path}</code>
                       </p>
                     </div>
                     <ConfidenceBadge confidence={change.confidence} />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4 mt-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-3">
                     <div>
-                      <p className="text-xs font-medium text-gray-600 mb-1">Original:</p>
-                      <pre className="text-xs bg-gray-50 p-2 rounded overflow-x-auto">
+                      <p className="font-label text-[#121212] text-xs mb-1">Original</p>
+                      <pre className="text-xs bg-[#E0E0E0] p-3 border-2 border-[#121212] overflow-x-auto font-mono">
                         {JSON.stringify(change.originalValue, null, 2) || 'null'}
                       </pre>
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-gray-600 mb-1">New:</p>
-                      <pre className="text-xs bg-blue-50 p-2 rounded overflow-x-auto">
+                      <p className="font-label text-[#121212] text-xs mb-1">New</p>
+                      <pre className="text-xs bg-[#FFF9C4] p-3 border-2 border-[#121212] overflow-x-auto font-mono">
                         {JSON.stringify(change.newValue, null, 2)}
                       </pre>
                     </div>
@@ -255,10 +246,13 @@ export const WhatIfExplorer: React.FC<WhatIfExplorerProps> = ({ scene, branch, o
 
                   {change.impact.length > 0 && (
                     <div className="mt-3">
-                      <p className="text-xs font-medium text-gray-600 mb-1">Impact:</p>
-                      <div className="flex flex-wrap gap-1">
+                      <p className="font-label text-[#121212] text-xs mb-2">Impact</p>
+                      <div className="flex flex-wrap gap-2">
                         {change.impact.map((impact, i) => (
-                          <span key={i} className="text-xs px-2 py-1 bg-yellow-100 text-yellow-800 rounded">
+                          <span
+                            key={i}
+                            className="text-xs px-2 py-1 bg-[#F0C020] text-[#121212] border-2 border-[#121212] font-bold uppercase"
+                          >
                             {impact}
                           </span>
                         ))}
@@ -269,43 +263,42 @@ export const WhatIfExplorer: React.FC<WhatIfExplorerProps> = ({ scene, branch, o
               ))}
             </div>
 
-            <div className="mt-6 flex items-center justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() => setProposedChanges([])}
-              >
+            <div className="mt-6 flex flex-wrap items-center justify-end gap-2">
+              <Button variant="outline" onClick={() => setProposedChanges([])}>
                 Cancel
               </Button>
-              <Button
-                onClick={applyChanges}
-                disabled={processing}
-                className="bg-green-600 hover:bg-green-700"
-              >
+              <Button variant="secondary" onClick={applyChanges} disabled={processing}>
                 Apply Changes & Create Branch
               </Button>
             </div>
           </div>
         )}
 
-        {/* Query History */}
         {queryHistory.length > 0 && (
           <div>
-            <h3 className="text-lg font-semibold text-gray-800 mb-3">History</h3>
+            <h3 className="font-subheading text-[#121212] text-lg mb-3">History</h3>
             <div className="space-y-2">
               {queryHistory.map((q) => (
-                <div key={q.id} className="p-3 bg-gray-50 rounded-lg">
-                  <div className="flex items-start justify-between">
+                <div
+                  key={q.id}
+                  className="p-3 sm:p-4 bg-white border-4 border-[#121212] shadow-bauhaus-sm"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                     <div>
-                      <p className="text-sm text-gray-700">{q.query}</p>
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-sm font-medium text-[#121212]">{q.query}</p>
+                      <p className="text-xs text-[#121212]/70 mt-1 font-medium">
                         Scene: {q.sceneId} | Type: {q.type} | Changes: {q.changes.length}
                       </p>
                     </div>
-                    <span className={`text-xs px-2 py-1 rounded ${
-                      q.status === 'complete' ? 'bg-green-100 text-green-800' :
-                      q.status === 'approved' ? 'bg-blue-100 text-blue-800' :
-                      'bg-gray-700 text-gray-800'
-                    }`}>
+                    <span
+                      className={`text-xs px-2 py-1 font-bold uppercase ${
+                        q.status === 'complete'
+                          ? 'bg-[#1040C0] text-white border-2 border-[#121212]'
+                          : q.status === 'approved'
+                            ? 'bg-[#F0C020] text-[#121212] border-2 border-[#121212]'
+                            : 'bg-[#E0E0E0] text-[#121212] border-2 border-[#121212]'
+                      }`}
+                    >
                       {q.status}
                     </span>
                   </div>
@@ -316,11 +309,11 @@ export const WhatIfExplorer: React.FC<WhatIfExplorerProps> = ({ scene, branch, o
         )}
 
         {processing && (
-          <div className="flex items-center justify-center h-64">
+          <div className="flex items-center justify-center min-h-64">
             <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-              <p className="text-gray-600">Analyzing your what-if scenario...</p>
-              <p className="text-sm text-gray-500 mt-2">This may take a moment</p>
+              <div className="w-12 h-12 border-4 border-[#121212] border-t-[#D02020] rounded-full animate-spin mx-auto mb-4" />
+              <p className="font-bold uppercase tracking-widest text-[#121212]">Analyzing your what-if scenario</p>
+              <p className="text-sm font-medium text-[#121212]/70 mt-2">This may take a moment</p>
             </div>
           </div>
         )}

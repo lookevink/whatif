@@ -12,10 +12,13 @@
   "dependencies": {
     "@babylonjs/core": "^8.53.0",
     "@babylonjs/gui": "^8.53.0",
+    "@babylonjs/inspector": "^8.53.0",
     "@babylonjs/loaders": "^8.53.0",
     "axios": "^1.13.6",
+    "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "js-yaml": "^4.1.1",
+    "lucide-react": "^0.575.0",
     "radix-ui": "^1.4.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

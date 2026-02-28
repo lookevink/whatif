@@ -1,6 +1,7 @@
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, Query, UploadFile
+import yaml
+from fastapi import Body, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, PlainTextResponse
 
@@ -126,6 +127,46 @@ def api_studio_git_tree(project_name: str):
 
 
 BINARY_EXTENSIONS = {".glb", ".gltf", ".bin", ".png", ".jpg", ".jpeg", ".webp", ".ktx2"}
+
+
+@app.post("/api/studio/projects/{project_name}/scenes/{scene_id}/arrangement")
+def api_studio_save_arrangement(
+    project_name: str,
+    scene_id: str,
+    act: str = Query(..., description="Act folder (e.g. act1, act2)"),
+    payload: dict = Body(...),
+):
+    """Save blocking and lighting from 3D viewer to scene YAML files."""
+    project_root = get_project_root()
+    scenes_dir = get_scenes_dir(project_root, project_name)
+    scene_dir = scenes_dir / act / scene_id
+
+    if not scene_dir.exists():
+        raise HTTPException(status_code=404, detail=f"Scene not found: {act}/{scene_id}")
+
+    blocking = payload.get("blocking")
+    lighting = payload.get("lighting")
+
+    written = []
+    if blocking is not None:
+        # Normalize for YAML: use key_positions and blocking (array) for compatibility
+        out_blocking = {"space": blocking.get("space", {})}
+        if "characterMovements" in blocking:
+            out_blocking["blocking"] = blocking["characterMovements"]
+        (scene_dir / "blocking.yaml").write_text(
+            yaml.dump(out_blocking, default_flow_style=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+        written.append("blocking.yaml")
+
+    if lighting is not None:
+        (scene_dir / "lighting.yaml").write_text(
+            yaml.dump(lighting, default_flow_style=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+        written.append("lighting.yaml")
+
+    return {"status": "saved", "files": written}
 
 
 @app.get("/api/studio/projects/{project_name}/files/{file_path:path}")
