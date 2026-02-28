@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as BABYLON from '@babylonjs/core';
 import '@babylonjs/loaders/glTF';
 import type { Scene, CharacterModel, PropModel, LocationModel, LightingConfig } from '../../lib/studio/types';
+import { ConfidenceBadge } from './ConfidenceBadge';
 
 interface BabylonSceneViewerProps {
   scene: Scene;
@@ -9,6 +10,7 @@ interface BabylonSceneViewerProps {
   props?: PropModel[];
   location?: LocationModel;
   onReady?: (scene: BABYLON.Scene) => void;
+  fullscreen?: boolean;
 }
 
 export const BabylonSceneViewer: React.FC<BabylonSceneViewerProps> = ({
@@ -16,7 +18,8 @@ export const BabylonSceneViewer: React.FC<BabylonSceneViewerProps> = ({
   characters = [],
   props = [],
   location,
-  onReady
+  onReady,
+  fullscreen = false
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<BABYLON.Engine | null>(null);
@@ -452,7 +455,7 @@ export const BabylonSceneViewer: React.FC<BabylonSceneViewerProps> = ({
   };
 
   return (
-    <div className="relative w-full h-full bg-gray-900 rounded-lg overflow-hidden">
+    <div className={`relative w-full h-full bg-gray-900 overflow-hidden ${fullscreen ? 'rounded-none' : 'rounded-lg'}`}>
       <canvas
         ref={canvasRef}
         className="w-full h-full"
@@ -468,12 +471,16 @@ export const BabylonSceneViewer: React.FC<BabylonSceneViewerProps> = ({
         </div>
       )}
 
-      <div className="absolute bottom-4 left-4 bg-black bg-opacity-50 text-white p-2 rounded">
+      <div className="absolute bottom-4 left-4 bg-black bg-opacity-50 text-white p-2 rounded flex items-center gap-2">
         <p className="text-sm font-mono">Scene: {studioScene.id}</p>
         {studioScene._status && (
-          <p className="text-xs text-yellow-400">
-            Confidence: {Math.round(studioScene._status.confidence * 100)}%
-          </p>
+          <ConfidenceBadge
+            confidence={studioScene._status.confidence}
+            missingFields={studioScene._status.missingFields}
+            generatedFields={studioScene._status.generatedFields}
+            complete={studioScene._status.complete}
+            dark
+          />
         )}
       </div>
 

@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import type { Scene, WhatIfQuery, ProposedChange } from '../../lib/studio/types';
+import { ConfidenceBadge } from './ConfidenceBadge';
 
 interface WhatIfExplorerProps {
   scene: Scene;
   branch: string;
   onQuery: (query: string) => void;
+  embedded?: boolean;
 }
 
-export const WhatIfExplorer: React.FC<WhatIfExplorerProps> = ({ scene, branch, onQuery }) => {
+export const WhatIfExplorer: React.FC<WhatIfExplorerProps> = ({ scene, branch, onQuery, embedded = false }) => {
   const [query, setQuery] = useState('');
   const [processing, setProcessing] = useState(false);
   const [proposedChanges, setProposedChanges] = useState<ProposedChange[]>([]);
@@ -157,10 +159,12 @@ export const WhatIfExplorer: React.FC<WhatIfExplorerProps> = ({ scene, branch, o
   };
 
   return (
-    <div className="h-full flex flex-col bg-white rounded-lg shadow-lg">
+    <div className={`h-full flex flex-col ${embedded ? '' : 'bg-white rounded-lg shadow-lg'}`}>
       {/* Query Input */}
-      <div className="p-4 border-b border-gray-200">
-        <h2 className="text-xl font-semibold text-gray-800 mb-4">What-If Explorer</h2>
+      <div className={embedded ? 'pt-0' : 'p-4 border-b border-gray-200'}>
+        {!embedded && (
+          <h2 className="text-xl font-semibold text-gray-800 mb-4">What-If Explorer</h2>
+        )}
 
         <div className="space-y-4">
           <div>
@@ -174,7 +178,7 @@ export const WhatIfExplorer: React.FC<WhatIfExplorerProps> = ({ scene, branch, o
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSubmitQuery()}
                 placeholder="What if Marcus confronts Jane about the letter?"
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="flex-1 px-4 py-2 border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 disabled={processing}
               />
               <button
@@ -195,7 +199,7 @@ export const WhatIfExplorer: React.FC<WhatIfExplorerProps> = ({ scene, branch, o
                 <button
                   key={idx}
                   onClick={() => setQuery(example)}
-                  className="text-xs px-3 py-1 bg-gray-100 text-gray-700 rounded-full hover:bg-gray-200"
+                  className="text-xs px-3 py-1 bg-gray-700 text-gray-700 rounded-full hover:bg-gray-200"
                 >
                   {example}
                 </button>
@@ -213,7 +217,7 @@ export const WhatIfExplorer: React.FC<WhatIfExplorerProps> = ({ scene, branch, o
               <h3 className="text-lg font-semibold text-gray-800">Proposed Changes</h3>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-600">New branch:</span>
-                <code className="px-2 py-1 bg-gray-100 text-sm rounded">{branchName}</code>
+                <code className="px-2 py-1 bg-gray-800 text-white text-sm rounded">{branchName}</code>
               </div>
             </div>
 
@@ -222,25 +226,14 @@ export const WhatIfExplorer: React.FC<WhatIfExplorerProps> = ({ scene, branch, o
                 <div key={idx} className="border border-gray-200 rounded-lg p-4">
                   <div className="flex items-start justify-between mb-2">
                     <div>
-                      <p className="text-sm font-medium text-gray-700">
+                      <p className="text-sm font-medium text-gray-900">
                         Change #{idx + 1}: {change.path.split('/').pop()}
                       </p>
                       <p className="text-xs text-gray-500 mt-1">
                         Path: <code className="bg-gray-50 px-1">{change.path}</code>
                       </p>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <div className="text-xs text-gray-600">Confidence:</div>
-                      <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-green-500"
-                          style={{ width: `${change.confidence * 100}%` }}
-                        />
-                      </div>
-                      <span className="text-xs text-gray-600">
-                        {Math.round(change.confidence * 100)}%
-                      </span>
-                    </div>
+                    <ConfidenceBadge confidence={change.confidence} />
                   </div>
 
                   <div className="grid grid-cols-2 gap-4 mt-3">
@@ -277,7 +270,7 @@ export const WhatIfExplorer: React.FC<WhatIfExplorerProps> = ({ scene, branch, o
             <div className="mt-6 flex items-center justify-end gap-2">
               <button
                 onClick={() => setProposedChanges([])}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                className="px-4 py-2 border border-gray-700 text-gray-700 rounded-lg hover:bg-gray-50"
               >
                 Cancel
               </button>
@@ -309,7 +302,7 @@ export const WhatIfExplorer: React.FC<WhatIfExplorerProps> = ({ scene, branch, o
                     <span className={`text-xs px-2 py-1 rounded ${
                       q.status === 'complete' ? 'bg-green-100 text-green-800' :
                       q.status === 'approved' ? 'bg-blue-100 text-blue-800' :
-                      'bg-gray-100 text-gray-800'
+                      'bg-gray-700 text-gray-800'
                     }`}>
                       {q.status}
                     </span>

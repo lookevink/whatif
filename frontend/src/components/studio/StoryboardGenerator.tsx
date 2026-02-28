@@ -166,7 +166,7 @@ export const StoryboardGenerator: React.FC<StoryboardGeneratorProps> = ({ scene 
             <select
               value={selectedStyle}
               onChange={(e) => setSelectedStyle(e.target.value as any)}
-              className="ml-2 px-2 py-1 border border-gray-300 rounded"
+              className="ml-2 px-2 py-1 border border-gray-700 rounded"
             >
               <option value="cinematic">Cinematic</option>
               <option value="sketch">Sketch</option>
@@ -183,7 +183,7 @@ export const StoryboardGenerator: React.FC<StoryboardGeneratorProps> = ({ scene 
               max="12"
               value={panelCount}
               onChange={(e) => setPanelCount(parseInt(e.target.value))}
-              className="ml-2 w-16 px-2 py-1 border border-gray-300 rounded"
+              className="ml-2 w-16 px-2 py-1 border border-gray-700 rounded"
             />
           </div>
 
@@ -246,12 +246,12 @@ export const StoryboardGenerator: React.FC<StoryboardGeneratorProps> = ({ scene 
 
                 <div className="mt-2 flex items-center gap-2 text-xs text-gray-500">
                   {panel.cameraAngle && (
-                    <span className="px-2 py-1 bg-gray-100 rounded">
+                    <span className="px-2 py-1 bg-gray-700 rounded">
                       {panel.cameraAngle}
                     </span>
                   )}
                   {panel.lighting && (
-                    <span className="px-2 py-1 bg-gray-100 rounded">
+                    <span className="px-2 py-1 bg-gray-700 rounded">
                       {panel.lighting}
                     </span>
                   )}

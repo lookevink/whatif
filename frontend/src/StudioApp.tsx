@@ -62,11 +62,11 @@ export const StudioApp: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-100">
+    <div className="flex flex-col h-screen bg-gray-700">
       {/* Header */}
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="px-6 py-4">
-          <h1 className="text-2xl font-bold text-gray-800">AI Film Studio</h1>
+          <h1 className="text-2xl font-bold text-gray-800">Whatif Studio</h1>
         </div>
       </header>
 

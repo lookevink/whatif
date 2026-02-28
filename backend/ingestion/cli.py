@@ -7,7 +7,7 @@ from .config import get_project_root
 
 app = typer.Typer(
     name="whatif",
-    help="AI Film Studio — ingest scripts, manage timelines, explore what-ifs",
+    help="Whatif Studio — ingest scripts, manage timelines, explore what-ifs",
 )
 
 

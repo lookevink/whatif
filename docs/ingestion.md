@@ -1,4 +1,4 @@
-# AI Film Studio — Complete State Machine Spec
+# Whatif Studio — Complete State Machine Spec
 
 ## State Domains
 

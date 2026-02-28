@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "whatif-backend"
 version = "0.1.0"
-description = "AI Film Studio backend and ingestion pipeline"
+description = "Whatif Studio backend and ingestion pipeline"
 requires-python = ">=3.11"
 dependencies = [
     "typer>=0.20.0",

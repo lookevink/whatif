@@ -1,4 +1,4 @@
-// Core types for the AI Film Studio system
+// Core types for the Whatif Studio system
 
 export interface GitVisualization {
   branches: Branch[];
