@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
 
 interface ConfidenceBadgeProps {
   confidence: number;
@@ -40,16 +41,18 @@ export const ConfidenceBadge: React.FC<ConfidenceBadgeProps> = ({
       onMouseEnter={() => setIsOpen(true)}
       onMouseLeave={() => setIsOpen(false)}
     >
-      <button
+      <Button
         type="button"
-        className={`inline-flex items-center justify-center w-5 h-5 rounded-full transition-colors cursor-pointer text-sm ${
+        variant="ghost"
+        size="icon-xs"
+        className={`inline-flex items-center justify-center rounded-full ${
           dark ? 'text-white/80 hover:text-white hover:bg-white/10' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
         }`}
         title="Data quality & completeness"
         aria-label="Show data quality info"
       >
         {children ?? 'ⓘ'}
-      </button>
+      </Button>
       {isOpen && (
         <div className="absolute z-50 mt-1 min-w-[180px] p-3 bg-white rounded-lg shadow-lg border border-gray-300 text-left">
           <div className="text-xs font-medium text-gray-900 mb-2">

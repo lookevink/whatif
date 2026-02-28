@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { GitTreeVisualization } from './components/studio/GitTreeVisualization';
 import { SceneSelector } from './components/studio/SceneSelector';
 import { BabylonSceneViewer } from './components/studio/BabylonSceneViewer';
@@ -97,36 +98,30 @@ export const StudioApp: React.FC = () => {
               {/* Tab Navigation */}
               <div className="bg-white border-b border-gray-200">
                 <div className="flex space-x-1 px-4">
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setActiveTab('viewer')}
-                    className={`px-4 py-2 text-sm font-medium ${
-                      activeTab === 'viewer'
-                        ? 'text-blue-600 border-b-2 border-blue-600'
-                        : 'text-gray-600 hover:text-gray-800'
-                    }`}
+                    className={activeTab === 'viewer' ? 'text-blue-600 border-b-2 border-blue-600 rounded-none' : 'text-gray-600 hover:text-gray-800'}
                   >
                     3D Viewer
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setActiveTab('storyboard')}
-                    className={`px-4 py-2 text-sm font-medium ${
-                      activeTab === 'storyboard'
-                        ? 'text-blue-600 border-b-2 border-blue-600'
-                        : 'text-gray-600 hover:text-gray-800'
-                    }`}
+                    className={activeTab === 'storyboard' ? 'text-blue-600 border-b-2 border-blue-600 rounded-none' : 'text-gray-600 hover:text-gray-800'}
                   >
                     Storyboard
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setActiveTab('whatif')}
-                    className={`px-4 py-2 text-sm font-medium ${
-                      activeTab === 'whatif'
-                        ? 'text-blue-600 border-b-2 border-blue-600'
-                        : 'text-gray-600 hover:text-gray-800'
-                    }`}
+                    className={activeTab === 'whatif' ? 'text-blue-600 border-b-2 border-blue-600 rounded-none' : 'text-gray-600 hover:text-gray-800'}
                   >
                     What If...
-                  </button>
+                  </Button>
                 </div>
               </div>
 

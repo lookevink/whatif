@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '@/components/ui/button';
 import type { Scene, WhatIfQuery, ProposedChange } from '../../lib/studio/types';
 import { ConfidenceBadge } from './ConfidenceBadge';
 
@@ -181,13 +182,12 @@ export const WhatIfExplorer: React.FC<WhatIfExplorerProps> = ({ scene, branch, o
                 className="flex-1 px-4 py-2 border border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 disabled={processing}
               />
-              <button
+              <Button
                 onClick={handleSubmitQuery}
                 disabled={processing || !query.trim()}
-                className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-400"
               >
                 {processing ? 'Processing...' : 'Explore'}
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -196,13 +196,15 @@ export const WhatIfExplorer: React.FC<WhatIfExplorerProps> = ({ scene, branch, o
             <p className="text-sm text-gray-600 mb-2">Try these examples:</p>
             <div className="flex flex-wrap gap-2">
               {exampleQueries.map((example, idx) => (
-                <button
+                <Button
                   key={idx}
+                  variant="outline"
+                  size="xs"
                   onClick={() => setQuery(example)}
-                  className="text-xs px-3 py-1 bg-gray-700 text-gray-700 rounded-full hover:bg-gray-200"
+                  className="rounded-full text-xs"
                 >
                   {example}
-                </button>
+                </Button>
               ))}
             </div>
           </div>
@@ -268,19 +270,19 @@ export const WhatIfExplorer: React.FC<WhatIfExplorerProps> = ({ scene, branch, o
             </div>
 
             <div className="mt-6 flex items-center justify-end gap-2">
-              <button
+              <Button
+                variant="outline"
                 onClick={() => setProposedChanges([])}
-                className="px-4 py-2 border border-gray-700 text-gray-700 rounded-lg hover:bg-gray-50"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={applyChanges}
                 disabled={processing}
-                className="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:bg-gray-400"
+                className="bg-green-600 hover:bg-green-700"
               >
                 Apply Changes & Create Branch
-              </button>
+              </Button>
             </div>
           </div>
         )}

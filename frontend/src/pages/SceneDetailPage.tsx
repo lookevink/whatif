@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { CircleHelp } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { BabylonSceneViewer } from '../components/studio/BabylonSceneViewer';
 import { StoryboardGenerator } from '../components/studio/StoryboardGenerator';
 import { WhatIfExplorer } from '../components/studio/WhatIfExplorer';
@@ -78,12 +80,14 @@ export const SceneDetailPage: React.FC = () => {
         <header className="bg-white shadow-sm border-b border-gray-200">
           <div className="px-6 py-3 flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <button
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => navigate('/')}
-                className="text-gray-600 hover:text-gray-800 text-sm font-medium"
+                className="text-gray-600 hover:text-gray-800"
               >
                 ← Back to Scenes
-              </button>
+              </Button>
               <h1 className="text-xl font-bold text-gray-900">Scene: {scene.id}</h1>
               {scene._status && (
                 <ConfidenceBadge
@@ -131,24 +135,25 @@ export const SceneDetailPage: React.FC = () => {
           </div>
 
           {/* Round What If button */}
-          <button
+          <Button
+            size="lg"
             onClick={() => setShowWhatIf(true)}
-            className="fixed bottom-8 right-8 w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg flex items-center justify-center text-sm font-medium transition-all hover:scale-110 z-40"
+            className="fixed bottom-8 right-8 w-14 h-14 rounded-full shadow-lg transition-all hover:scale-110 z-40"
             title="What If..."
           >
-            What if?
-          </button>
+            <CircleHelp className="size-6" />
+          </Button>
 
           {/* 3D Viewer entry - small preview / enter fullscreen */}
           <div className="border-t border-gray-200 bg-white p-4">
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-600">3D Preview</span>
-              <button
+              <Button
                 onClick={() => setViewerFullscreen(true)}
-                className="px-4 py-2 bg-gray-800 text-white text-sm rounded-lg hover:bg-gray-700"
+                className="bg-gray-800 hover:bg-gray-700"
               >
                 Enter Fullscreen 3D
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -167,15 +172,17 @@ export const SceneDetailPage: React.FC = () => {
           <div className="relative ml-auto w-full max-w-lg bg-white shadow-2xl overflow-y-auto animate-slide-in">
             <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-800">What-If Explorer</h2>
-              <button
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={() => setShowWhatIf(false)}
-                className="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-700"
+                className="text-gray-500 hover:text-gray-700 hover:bg-gray-100"
                 aria-label="Close"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
-              </button>
+              </Button>
             </div>
             <div className="p-6">
               <WhatIfExplorer
@@ -193,12 +200,13 @@ export const SceneDetailPage: React.FC = () => {
       {viewerFullscreen && (
         <div className="fixed inset-0 z-50 bg-black">
           <div className="absolute top-4 right-4 z-10">
-            <button
+            <Button
+              variant="secondary"
               onClick={() => setViewerFullscreen(false)}
-              className="px-4 py-2 bg-white/90 hover:bg-white text-gray-800 rounded-lg font-medium shadow-lg"
+              className="bg-white/90 hover:bg-white text-gray-800 shadow-lg"
             >
               Exit Fullscreen
-            </button>
+            </Button>
           </div>
           <div className="w-full h-full">
             <BabylonSceneViewer

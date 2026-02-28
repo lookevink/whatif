@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
 import type { Scene } from '../../lib/studio/types';
 import { StudioDataLoader } from '../../lib/studio/data-loader';
 import { ConfidenceBadge } from './ConfidenceBadge';
@@ -84,10 +85,11 @@ export const SceneSelector: React.FC<SceneSelectorProps> = ({
             <h3 className="text-lg font-semibold text-gray-900 mb-3 capitalize">{act.replace('act', 'Act ')}</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {actScenes.map((scene) => (
-                <button
+                <Button
                   key={scene.id}
+                  variant="outline"
                   onClick={() => handleSceneSelect(scene)}
-                  className="relative p-4 rounded-lg border-2 border-gray-300 bg-white hover:border-gray-900 hover:shadow-md transition-all text-left"
+                  className="relative h-auto p-4 rounded-lg border-2 border-gray-300 bg-white hover:border-gray-900 hover:shadow-md transition-all text-left justify-start"
                 >
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex-1 min-w-0">
@@ -129,7 +131,7 @@ export const SceneSelector: React.FC<SceneSelectorProps> = ({
                       </div>
                     </div>
                   )}
-                </button>
+                </Button>
               ))}
             </div>
           </div>

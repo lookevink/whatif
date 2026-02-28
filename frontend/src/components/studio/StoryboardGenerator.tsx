@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
 import type { Scene, StoryboardPanel, CameraShot } from '../../lib/studio/types';
 
 interface StoryboardGeneratorProps {
@@ -105,7 +106,7 @@ export const StoryboardGenerator: React.FC<StoryboardGeneratorProps> = ({ scene 
 
       setPanels(updatedPanels);
     } catch (error) {
-      console.error('Failed to generate images:', error);
+      console.error('Failed to generate storyboard:', error);
     } finally {
       setGenerating(false);
     }
@@ -144,19 +145,18 @@ export const StoryboardGenerator: React.FC<StoryboardGeneratorProps> = ({ scene 
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold text-gray-800">Storyboard Generator</h2>
           <div className="flex items-center gap-2">
-            <button
+            <Button
               onClick={generateImages}
               disabled={generating}
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400"
             >
-              {generating ? 'Generating...' : 'Generate Images'}
-            </button>
-            <button
+              {generating ? 'Generating...' : 'Generate Storyboard'}
+            </Button>
+            <Button
               onClick={exportStoryboard}
-              className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+              className="bg-green-600 hover:bg-green-700"
             >
               Export
-            </button>
+            </Button>
           </div>
         </div>
 
