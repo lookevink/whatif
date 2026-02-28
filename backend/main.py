@@ -1531,35 +1531,45 @@ async def api_dialogue_chat(request: CharacterDialogueRequest):
         raise HTTPException(status_code=503, detail="Gemini API key not configured")
 
     _genai, _types = _get_genai()
-    client = _genai.Client(vertexai=False, api_key=gemini_key)
 
-    # Build conversation history
-    history = []
+    # Build contents list: conversation history + new message
+    contents = []
     for msg in request.conversation_history:
         role = "user" if msg.role == "user" else "model"
-        history.append(
+        contents.append(
             _types.Content(role=role, parts=[_types.Part(text=msg.text)])
         )
-
-    chat = client.chats.create(
-        model="gemini-2.5-flash",
-        config=_types.GenerateContentConfig(
-            system_instruction=system_prompt,
-            temperature=0.85,
-            max_output_tokens=300,
-        ),
-        history=history,
+    contents.append(
+        _types.Content(role="user", parts=[_types.Part(text=request.message)])
     )
 
+    config = _types.GenerateContentConfig(
+        system_instruction=system_prompt,
+        temperature=0.85,
+        max_output_tokens=300,
+    )
+
+    # Generate the full streamed response eagerly, then yield SSE chunks.
+    # This avoids the "client has been closed" error from httpx session
+    # being garbage-collected while the async generator is still running.
+    try:
+        client = _genai.Client(vertexai=False, api_key=gemini_key)
+        chunks: list[str] = []
+        for chunk in client.models.generate_content_stream(
+            model="gemini-2.5-flash",
+            contents=contents,
+            config=config,
+        ):
+            if chunk.text:
+                chunks.append(chunk.text)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
     async def event_stream():
-        try:
-            for chunk in chat.send_message_stream(request.message):
-                if chunk.text:
-                    data = json.dumps({"type": "chunk", "text": chunk.text})
-                    yield f"data: {data}\n\n"
-            yield f"data: {json.dumps({'type': 'done'})}\n\n"
-        except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+        for text in chunks:
+            data = json.dumps({"type": "chunk", "text": text})
+            yield f"data: {data}\n\n"
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
     return StreamingResponse(
         event_stream(),
