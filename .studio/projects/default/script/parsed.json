@@ -1,0 +1,53 @@
+{
+  "title_page": {
+    "title": "The Letter",
+    "author": "Test Writer",
+    "credit": "",
+    "source": "",
+    "draft_date": "2026",
+    "contact": "",
+    "extra": {}
+  },
+  "scenes": [
+    {
+      "scene_number": 1,
+      "heading": "INT. MARCUS'S APARTMENT - DAY",
+      "elements": [
+        {
+          "type": "action",
+          "text": "Moving boxes are stacked against the wall. MARCUS, 34, carries another one in.",
+          "character": null,
+          "parenthetical": null
+        },
+        {
+          "type": "dialogue",
+          "text": "She said she'd be here.",
+          "character": "MARCUS",
+          "parenthetical": "(to himself)"
+        },
+        {
+          "type": "action",
+          "text": "He notices an envelope on the kitchen table.",
+          "character": null,
+          "parenthetical": null
+        },
+        {
+          "type": "dialogue",
+          "text": "I'm in the kitchen.",
+          "character": "JANE",
+          "parenthetical": "(O.S.)"
+        },
+        {
+          "type": "action",
+          "text": "MARCUS picks up the letter. His face changes.",
+          "character": null,
+          "parenthetical": null
+        }
+      ]
+    }
+  ],
+  "characters": [
+    "JANE",
+    "MARCUS"
+  ]
+}
