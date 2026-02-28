@@ -1,6 +1,8 @@
+import io
 import json
 import re
 import subprocess
+import zipfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -8,7 +10,7 @@ from typing import Any
 import yaml
 from fastapi import Body, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
 from pydantic import BaseModel
 
 from ingestion.config import (
@@ -17,7 +19,22 @@ from ingestion.config import (
     get_project_dir,
     get_script_dir,
     get_scenes_dir,
+    get_characters_dir,
 )
+
+# Lazy-loaded google-genai SDK (installed in .venv but not in system Python)
+_genai_mod = None
+_genai_types_mod = None
+
+def _get_genai():
+    """Return (genai, genai_types) from google-genai SDK, installing lazily."""
+    global _genai_mod, _genai_types_mod
+    if _genai_mod is None:
+        from google import genai as _g
+        from google.genai import types as _t
+        _genai_mod = _g
+        _genai_types_mod = _t
+    return _genai_mod, _genai_types_mod
 
 app = FastAPI()
 
@@ -423,10 +440,8 @@ async def _ai_modify_scene(scene_yaml: dict, what_if_text: str) -> dict:
         return _apply_whatif_modifications(scene_yaml, what_if_text)
 
     try:
-        import google.generativeai as genai
-
-        genai.configure(api_key=gemini_key)
-        model = genai.GenerativeModel("gemini-2.5-flash")
+        _genai, _types = _get_genai()
+        client = _genai.Client(vertexai=False, api_key=gemini_key)
 
         prompt = f"""Given this scene YAML:
 {yaml.dump(scene_yaml, default_flow_style=False)}
@@ -444,9 +459,10 @@ Modify the scene YAML to reflect this change. You can modify:
 
 Return ONLY valid YAML with your modifications."""
 
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.GenerationConfig(temperature=0.7, max_output_tokens=1000),
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+            config=_types.GenerateContentConfig(temperature=0.7, max_output_tokens=1000),
         )
         text = response.text.strip()
         if text.startswith("```yaml"):
@@ -762,6 +778,447 @@ def _analyze_changes(original: dict, modified: dict) -> dict[str, list[str]]:
         if key not in modified:
             changes["removed"].append(key)
     return changes
+
+
+# --- Storyboard Image Generation & Veo Export ---
+
+
+class StoryboardGenerateRequest(BaseModel):
+    scene_id: str
+    act: str
+    project_name: str | None = "default"
+    style: str | None = "cinematic"
+    panel_count: int | None = 6
+
+
+def _load_character_profile(char_id: str, project_name: str) -> dict:
+    """Load character profile.yaml for prompt enrichment."""
+    project_root = get_project_root()
+    chars_dir = get_characters_dir(project_root, project_name)
+    profile_path = chars_dir / char_id / "profile.yaml"
+    if profile_path.exists():
+        return yaml.safe_load(profile_path.read_text(encoding="utf-8")) or {}
+    return {"id": char_id, "name": char_id.replace("_", " ").title()}
+
+
+def _find_character_pngs(char_id: str, project_name: str) -> list[Path]:
+    """Find PNG reference images in character assets directory."""
+    project_root = get_project_root()
+    chars_dir = get_characters_dir(project_root, project_name)
+    assets_dir = chars_dir / char_id / "assets"
+    pngs: list[Path] = []
+    if assets_dir.exists():
+        pngs.extend(assets_dir.glob("*.png"))
+    # Also check visual.yaml for referenceImages / reference_images
+    visual_path = assets_dir / "visual.yaml" if assets_dir.exists() else None
+    if visual_path and visual_path.exists():
+        visual = yaml.safe_load(visual_path.read_text(encoding="utf-8")) or {}
+        project_dir = get_project_dir(project_root, project_name)
+        for ref in visual.get("referenceImages", []) + visual.get("reference_images", []):
+            p = project_dir / ref
+            if p.exists():
+                pngs.append(p)
+    return pngs
+
+
+def _load_location_description(location_id: str, project_name: str) -> dict:
+    """Load location description.yaml for prompt enrichment."""
+    project_root = get_project_root()
+    project_dir = get_project_dir(project_root, project_name)
+    desc_path = project_dir / "world" / "locations" / location_id / "description.yaml"
+    if desc_path.exists():
+        return yaml.safe_load(desc_path.read_text(encoding="utf-8")) or {}
+    return {"id": location_id, "name": location_id.replace("_", " ").title()}
+
+
+def _load_scene_directions(scene_id: str, act: str, project_name: str) -> str:
+    """Load directions.md for a scene."""
+    project_root = get_project_root()
+    scenes_dir = get_scenes_dir(project_root, project_name)
+    path = scenes_dir / act / scene_id / "directions.md"
+    if path.exists():
+        return path.read_text(encoding="utf-8")
+    return ""
+
+
+def _load_storyboard_yaml(scene_id: str, act: str, project_name: str) -> dict:
+    """Load existing storyboard.yaml for a scene."""
+    project_root = get_project_root()
+    scenes_dir = get_scenes_dir(project_root, project_name)
+    path = scenes_dir / act / scene_id / "storyboard.yaml"
+    if path.exists():
+        return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return {}
+
+
+def _build_panel_image_prompt(
+    panel: dict,
+    scene_yaml: dict,
+    character_profiles: dict[str, dict],
+    location_desc: dict,
+    directions: str,
+    style: str,
+) -> str:
+    """Build a rich prompt for a single storyboard panel image."""
+    parts = []
+
+    style_map = {
+        "cinematic": "Cinematic film still, 35mm film grain, dramatic lighting, widescreen 16:9",
+        "sketch": "Pencil sketch storyboard, loose lines, grayscale, professional storyboard artist",
+        "comic": "Comic book panel, bold ink lines, dynamic composition, graphic novel style",
+        "realistic": "Photorealistic, high detail, natural lighting, cinematic composition",
+    }
+    parts.append(style_map.get(style, style_map["cinematic"]))
+
+    shot_type = panel.get("shotType", "medium")
+    parts.append(f"{shot_type.replace('_', ' ')} shot")
+
+    loc_name = location_desc.get("name", scene_yaml.get("location_id", "location"))
+    loc_description = location_desc.get("description", "")
+    parts.append(f"Setting: {loc_name}")
+    if loc_description:
+        parts.append(loc_description[:120])
+
+    for cid in scene_yaml.get("character_ids", []):
+        profile = character_profiles.get(cid, {})
+        name = profile.get("name", cid.replace("_", " ").title())
+        desc = profile.get("description", "")
+        if desc:
+            parts.append(f"{name}: {desc[:100]}")
+        else:
+            parts.append(f"Character: {name}")
+
+    if panel.get("description"):
+        parts.append(panel["description"])
+
+    if panel.get("dialogue"):
+        parts.append(f"Dialogue moment: {'; '.join(panel['dialogue'][:2])[:150]}")
+
+    if panel.get("lighting"):
+        parts.append(f"Lighting: {panel['lighting']}")
+
+    heading = scene_yaml.get("heading", "")
+    if heading:
+        parts.append(f"Scene: {heading}")
+
+    if directions:
+        parts.append(f"Context: {directions[:200]}")
+
+    parts.append("19th century Gothic horror, period-accurate costume and setting")
+
+    return ". ".join(parts)
+
+
+async def _generate_panel_image(
+    prompt: str,
+    output_path: Path,
+    character_png_paths: list[Path],
+) -> bool:
+    """Generate a storyboard panel image using Gemini.
+
+    Uses the google-genai SDK (same as envision.py).
+    Strategy 1: gemini-2.0-flash-exp with image output.
+    Strategy 2: imagen-3.0-generate-002 fallback.
+    Returns True if image was generated, False otherwise.
+    """
+    api_key = get_gemini_api_key()
+    if not api_key:
+        print("No Gemini API key found, skipping image generation")
+        return False
+
+    _genai, _types = _get_genai()
+    client = _genai.Client(vertexai=False, api_key=api_key)
+
+    # ── Strategy 1: gemini-2.0-flash-exp with image output ──
+    try:
+        contents: list = []
+        for png_path in character_png_paths[:3]:
+            if png_path.exists():
+                contents.append(
+                    _types.Part.from_bytes(
+                        data=png_path.read_bytes(),
+                        mime_type="image/png",
+                    )
+                )
+        contents.append(prompt)
+
+        response = client.models.generate_content(
+            model="gemini-2.0-flash-exp",
+            contents=contents,
+            config=_types.GenerateContentConfig(
+                response_modalities=["IMAGE", "TEXT"],
+                temperature=0.8,
+            ),
+        )
+
+        for part in response.candidates[0].content.parts:
+            if part.inline_data and part.inline_data.mime_type.startswith("image/"):
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_bytes(part.inline_data.data)
+                return True
+
+    except Exception as e:
+        print(f"Gemini image gen failed for {output_path.name}: {e}")
+
+    # ── Strategy 2: Imagen 3 ──
+    try:
+        response = client.models.generate_images(
+            model="imagen-3.0-generate-002",
+            prompt=prompt[:480],
+            config=_types.GenerateImagesConfig(
+                number_of_images=1,
+                aspect_ratio="16:9",
+            ),
+        )
+        if response.generated_images:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(response.generated_images[0].image.image_bytes)
+            return True
+    except Exception as e2:
+        print(f"Imagen fallback also failed: {e2}")
+
+    return False
+
+
+def _estimate_panel_duration(panel: dict) -> int:
+    """Estimate video duration in seconds for a panel."""
+    base = {
+        "establishing": 4, "wide": 5, "medium": 4, "close_up": 3,
+        "extreme_close_up": 2, "over_shoulder": 4, "medium_close_up": 3,
+    }
+    duration = base.get(panel.get("shotType", "medium"), 4)
+    if panel.get("dialogue"):
+        duration += len(panel["dialogue"]) * 2
+    return duration
+
+
+def _generate_veo_prompt_md(
+    scene_yaml: dict,
+    panels: list[dict],
+    dialogue: list[dict],
+    directions: str,
+    character_profiles: dict[str, dict],
+    location_desc: dict,
+) -> str:
+    """Generate veo_prompt.md with per-panel video generation prompts."""
+    lines = [
+        "# Veo Video Generation Prompts",
+        "",
+        f"## Scene: {scene_yaml.get('heading', scene_yaml.get('id', 'Unknown'))}",
+        f"**Location:** {location_desc.get('name', scene_yaml.get('location_id', 'Unknown'))}",
+        f"**Characters:** {', '.join(c.replace('_', ' ').title() for c in scene_yaml.get('character_ids', []))}",
+        f"**Summary:** {scene_yaml.get('summary', '')}",
+        "",
+        "---",
+        "",
+    ]
+
+    movement_map = {
+        "establishing": "slow dolly in",
+        "wide": "static or slow pan",
+        "medium": "slight push in",
+        "close_up": "static, locked off",
+        "extreme_close_up": "static",
+        "over_shoulder": "subtle drift",
+        "medium_close_up": "slow push in",
+    }
+
+    for panel in panels:
+        idx = panel.get("index", 0)
+        shot = panel.get("shotType", "medium")
+        movement = movement_map.get(shot, "static")
+        duration = _estimate_panel_duration(panel)
+
+        lines.append(f"### Panel {idx + 1}: {shot.replace('_', ' ').title()}")
+        lines.append("")
+        lines.append(f"**Shot Type:** {shot}")
+        lines.append(f"**Camera Angle:** {panel.get('cameraAngle', 'standard')}")
+        lines.append(f"**Lighting:** {panel.get('lighting', 'natural')}")
+        lines.append(f"**Camera Movement:** {movement}")
+        lines.append(f"**Duration:** {duration}s")
+        lines.append("")
+        lines.append(f"**Description:** {panel.get('description', '')}")
+        lines.append("")
+
+        if panel.get("dialogue"):
+            lines.append("**Dialogue:**")
+            for d in panel["dialogue"]:
+                lines.append(f"> {d}")
+            lines.append("")
+
+        char_names = [
+            character_profiles.get(c, {}).get("name", c.replace("_", " ").title())
+            for c in scene_yaml.get("character_ids", [])
+        ]
+        lines.append(f"**Characters in frame:** {', '.join(char_names)}")
+        lines.append("")
+        lines.append("**Style:** 19th century Gothic horror, period costume, cinematic film grain")
+        lines.append("")
+
+        veo_prompt = ". ".join([
+            panel.get("prompt", panel.get("description", "")),
+            f"Camera: {movement}",
+            f"Duration: {duration}s",
+            "19th century Gothic horror, cinematic quality",
+        ])
+        lines.append(f"**Veo Prompt:** `{veo_prompt}`")
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+@app.post("/api/studio/projects/{project_name}/storyboard/generate")
+async def api_generate_storyboard_images(
+    project_name: str,
+    request: StoryboardGenerateRequest,
+):
+    """Generate storyboard panel images using Gemini/Imagen and save to scene directory."""
+    project_root = get_project_root()
+    scenes_dir = get_scenes_dir(project_root, project_name)
+    scene_dir = scenes_dir / request.act / request.scene_id
+
+    if not scene_dir.exists():
+        raise HTTPException(status_code=404, detail=f"Scene not found: {request.act}/{request.scene_id}")
+
+    # Load scene data
+    scene_yaml = _load_scene_yaml(request.scene_id, request.act, project_name)
+    dialogue = _load_scene_dialogue(request.scene_id, request.act, project_name)
+    directions = _load_scene_directions(request.scene_id, request.act, project_name)
+
+    # Load existing storyboard or generate panels
+    storyboard = _load_storyboard_yaml(request.scene_id, request.act, project_name)
+    if storyboard.get("panels"):
+        panels = storyboard["panels"]
+    else:
+        story_blocks = _generate_story_blocks(scene_yaml)
+        panels = _generate_storyboard(request.scene_id, scene_yaml, story_blocks, dialogue)
+
+    panel_count = request.panel_count or 6
+    panels = panels[:panel_count]
+
+    # Load character profiles and detect PNGs
+    char_ids = scene_yaml.get("character_ids", [])
+    character_profiles = {cid: _load_character_profile(cid, project_name) for cid in char_ids}
+    character_pngs: list[Path] = []
+    for cid in char_ids:
+        character_pngs.extend(_find_character_pngs(cid, project_name))
+
+    # Load location
+    location_id = scene_yaml.get("location_id", "")
+    location_desc = _load_location_description(location_id, project_name)
+
+    # Generate images per panel
+    storyboard_img_dir = scene_dir / "storyboard"
+    storyboard_img_dir.mkdir(parents=True, exist_ok=True)
+
+    generated_count = 0
+    for panel in panels:
+        idx = panel.get("index", panels.index(panel))
+        output_path = storyboard_img_dir / f"panel_{idx:03d}.png"
+
+        prompt = _build_panel_image_prompt(
+            panel, scene_yaml, character_profiles, location_desc,
+            directions, request.style or "cinematic",
+        )
+
+        success = await _generate_panel_image(prompt, output_path, character_pngs)
+
+        if success:
+            rel_path = f"scenes/{request.act}/{request.scene_id}/storyboard/panel_{idx:03d}.png"
+            panel["imageUrl"] = f"/api/studio/projects/{project_name}/files/{rel_path}"
+            generated_count += 1
+        else:
+            panel["imageUrl"] = None
+
+    # Update storyboard.yaml
+    storyboard_data = {
+        "scene_id": request.scene_id,
+        "act": request.act,
+        "style": request.style or "cinematic",
+        "generated": datetime.now().isoformat(),
+        "panel_count": len(panels),
+        "panels": panels,
+    }
+    (scene_dir / "storyboard.yaml").write_text(
+        yaml.dump(storyboard_data, default_flow_style=False, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+
+    return {
+        "success": True,
+        "scene_id": request.scene_id,
+        "generated_count": generated_count,
+        "total_panels": len(panels),
+        "panels": panels,
+    }
+
+
+@app.get("/api/studio/projects/{project_name}/storyboard/export")
+async def api_export_storyboard_zip(
+    project_name: str,
+    scene_id: str = Query(...),
+    act: str = Query(...),
+):
+    """Export scene storyboard as a zip file ready for Veo video generation."""
+    project_root = get_project_root()
+    scenes_dir = get_scenes_dir(project_root, project_name)
+    scene_dir = scenes_dir / act / scene_id
+
+    if not scene_dir.exists():
+        raise HTTPException(status_code=404, detail=f"Scene not found: {act}/{scene_id}")
+
+    # Load scene data
+    scene_yaml = _load_scene_yaml(scene_id, act, project_name)
+    dialogue = _load_scene_dialogue(scene_id, act, project_name)
+    directions = _load_scene_directions(scene_id, act, project_name)
+    storyboard = _load_storyboard_yaml(scene_id, act, project_name)
+    panels = storyboard.get("panels", [])
+
+    # Load character/location data for Veo prompt
+    char_ids = scene_yaml.get("character_ids", [])
+    character_profiles = {cid: _load_character_profile(cid, project_name) for cid in char_ids}
+    location_id = scene_yaml.get("location_id", "")
+    location_desc = _load_location_description(location_id, project_name)
+
+    # Build zip
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        # Scene files
+        for fname in ("scene.yaml", "storyboard.yaml", "directions.md", "dialogue.json"):
+            fpath = scene_dir / fname
+            if fpath.exists():
+                zf.write(fpath, fname)
+
+        # Panel PNGs
+        storyboard_img_dir = scene_dir / "storyboard"
+        if storyboard_img_dir.exists():
+            for png_file in sorted(storyboard_img_dir.glob("panel_*.png")):
+                zf.write(png_file, f"panels/{png_file.name}")
+
+        # Character reference PNGs
+        chars_dir = get_characters_dir(project_root, project_name)
+        for cid in char_ids:
+            assets_dir = chars_dir / cid / "assets"
+            if assets_dir.exists():
+                for png_file in assets_dir.glob("*.png"):
+                    zf.write(png_file, f"characters/{cid}/{png_file.name}")
+
+        # Veo prompt
+        veo_md = _generate_veo_prompt_md(
+            scene_yaml, panels, dialogue, directions,
+            character_profiles, location_desc,
+        )
+        zf.writestr("veo_prompt.md", veo_md)
+
+    buffer.seek(0)
+    filename = f"storyboard_{scene_id}_{act}.zip"
+    return StreamingResponse(
+        buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @app.post("/api/studio/whatif/scene/create")

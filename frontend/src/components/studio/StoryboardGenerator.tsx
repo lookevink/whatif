@@ -81,43 +81,84 @@ export const StoryboardGenerator: React.FC<StoryboardGeneratorProps> = ({ scene 
     return `${shot.type} shot of ${shot.subject || characters} in ${location}, ${shot.framingNotes || ''}, ${selectedStyle} style, film still`;
   };
 
+  const API_BASE = import.meta.env.VITE_API_URL || '';
+
   const generateImages = async () => {
     setGenerating(true);
     try {
-      const updatedPanels = await Promise.all(
-        panels.map(async (panel) => {
-          const response = await mockGenerateImage(panel.prompt || panel.description);
-          return { ...panel, imageUrl: response.url };
-        })
+      const response = await fetch(
+        `${API_BASE}/api/studio/projects/default/storyboard/generate`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            scene_id: scene.id,
+            act: scene.act,
+            project_name: 'default',
+            style: selectedStyle,
+            panel_count: panelCount,
+          }),
+        }
       );
-      setPanels(updatedPanels);
+
+      if (!response.ok) throw new Error(`Generation failed: ${response.statusText}`);
+
+      const data = await response.json();
+      if (data.panels) {
+        const updatedPanels: StoryboardPanel[] = data.panels.map((p: any) => ({
+          index: p.index,
+          shotType: p.shotType ?? p.shot_type ?? 'medium',
+          description: p.description ?? '',
+          dialogue: p.dialogue,
+          cameraAngle: p.cameraAngle ?? p.camera_angle,
+          lighting: p.lighting,
+          imageUrl: p.imageUrl ?? p.image_url,
+          prompt: p.prompt,
+        }));
+        setPanels(updatedPanels);
+      }
     } catch (error) {
       console.error('Failed to generate storyboard:', error);
+      // Fallback to placeholders
+      setPanels(panels.map((panel) => ({
+        ...panel,
+        imageUrl: `https://via.placeholder.com/512x288/1a1a2e/eee?text=${encodeURIComponent((panel.prompt || panel.description).slice(0, 30))}`,
+      })));
     } finally {
       setGenerating(false);
     }
   };
 
-  const mockGenerateImage = async (prompt: string): Promise<{ url: string }> => {
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    return {
-      url: `https://via.placeholder.com/512x288/1a1a2e/eee?text=${encodeURIComponent(prompt.slice(0, 30))}`
-    };
-  };
+  const exportStoryboard = async () => {
+    try {
+      const response = await fetch(
+        `${API_BASE}/api/studio/projects/default/storyboard/export?scene_id=${scene.id}&act=${scene.act}`,
+      );
 
-  const exportStoryboard = () => {
-    const storyboardData = {
-      scene: scene.id,
-      style: selectedStyle,
-      panels,
-      generated: new Date().toISOString()
-    };
-    const blob = new Blob([JSON.stringify(storyboardData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `storyboard_${scene.id}_${Date.now()}.json`;
-    a.click();
+      if (!response.ok) throw new Error('Export failed');
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `storyboard_${scene.id}_${Date.now()}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Export failed, falling back to JSON:', error);
+      const storyboardData = {
+        scene: scene.id,
+        style: selectedStyle,
+        panels,
+        generated: new Date().toISOString(),
+      };
+      const blob = new Blob([JSON.stringify(storyboardData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `storyboard_${scene.id}_${Date.now()}.json`;
+      a.click();
+    }
   };
 
   return (
@@ -128,15 +169,17 @@ export const StoryboardGenerator: React.FC<StoryboardGeneratorProps> = ({ scene 
           <h2 className="font-subheading text-[#121212]">Storyboard Generator</h2>
           <div className="flex flex-wrap gap-2">
             <Button
+              type="button"
               variant="default"
-              onClick={generateImages}
+              onClick={() => { generateImages(); }}
               disabled={generating}
             >
               {generating ? 'Generating...' : 'Generate Storyboard'}
             </Button>
             <Button
+              type="button"
               variant="secondary"
-              onClick={exportStoryboard}
+              onClick={() => { exportStoryboard(); }}
             >
               Export
             </Button>
