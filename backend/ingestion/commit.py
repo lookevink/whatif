@@ -13,6 +13,38 @@ from .config import (
     get_timelines_dir,
 )
 
+PROJECT_GITIGNORE = """# SQLite index — derived from YAML, never committed
+index.db
+index_version
+cache/
+"""
+
+
+def _ensure_project_git(project_dir: Path) -> None:
+    """Initialize project as git repo if not already. Adds .gitignore for index/cache."""
+    git_dir = project_dir / ".git"
+    if git_dir.exists() and (git_dir / "HEAD").exists():
+        _ensure_project_gitignore(project_dir)
+        return
+    result = subprocess.run(
+        ["git", "init"],
+        cwd=project_dir,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"git init failed in {project_dir}: {result.stderr or result.stdout}"
+        )
+    _ensure_project_gitignore(project_dir)
+
+
+def _ensure_project_gitignore(project_dir: Path) -> None:
+    """Ensure project .gitignore exists and excludes index/cache."""
+    gitignore = project_dir / ".gitignore"
+    if not gitignore.exists():
+        gitignore.write_text(PROJECT_GITIGNORE, encoding="utf-8")
+
 
 def run_review(project_root: Path | None = None) -> str:
     """Print summary of ingested data. Returns summary text."""
@@ -56,7 +88,8 @@ def run_review(project_root: Path | None = None) -> str:
 
 
 def run_commit(project_root: Path | None = None) -> None:
-    """Create decision_000, main timeline, git commit + tag v0-ingested."""
+    """Create decision_000, main timeline, git commit + tag v0-ingested.
+    Project dir (.studio/projects/default) is its own git repo."""
     root = project_root or get_project_root()
     project_dir = get_project_dir(root)
     decisions_dir = get_decisions_dir(root)
@@ -88,23 +121,14 @@ def run_commit(project_root: Path | None = None) -> None:
         encoding="utf-8",
     )
 
-    try:
-        subprocess.run(
-            ["git", "add", ".studio/", "project.yaml"],
-            cwd=root,
-            check=True,
-            capture_output=True,
-        )
-    except subprocess.CalledProcessError:
-        pass
+    _ensure_project_git(project_dir)
 
     try:
         subprocess.run(
-            ["git", "status", "--short"],
-            cwd=root,
+            ["git", "add", "."],
+            cwd=project_dir,
             check=True,
             capture_output=True,
-            text=True,
         )
     except subprocess.CalledProcessError:
         pass
@@ -112,7 +136,7 @@ def run_commit(project_root: Path | None = None) -> None:
     try:
         subprocess.run(
             ["git", "commit", "-m", "v0-ingested: initial screenplay ingestion"],
-            cwd=root,
+            cwd=project_dir,
             check=True,
             capture_output=True,
         )
@@ -122,7 +146,7 @@ def run_commit(project_root: Path | None = None) -> None:
     try:
         subprocess.run(
             ["git", "tag", "v0-ingested"],
-            cwd=root,
+            cwd=project_dir,
             check=True,
             capture_output=True,
         )

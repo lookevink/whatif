@@ -139,6 +139,47 @@ def index(
 
 
 @app.command()
+def project_status(
+    project_root: Path | None = typer.Option(
+        None,
+        "--project-root",
+        "-C",
+        help="Project root directory",
+        path_type=Path,
+    ),
+):
+    """Show project path and whether it has an active git repo."""
+    from .config import get_project_dir, get_project_name
+    root = get_project_root(project_root)
+    project_dir = get_project_dir(root)
+    project_name = get_project_name(root)
+    typer.echo(f"Project: {project_name}")
+    typer.echo(f"Path: {project_dir}")
+    git_dir = project_dir / ".git"
+    if git_dir.exists() and (git_dir / "HEAD").exists():
+        import subprocess
+        branch_result = subprocess.run(
+            ["git", "branch", "--show-current"],
+            cwd=project_dir,
+            capture_output=True,
+            text=True,
+        )
+        branch = (branch_result.stdout or "").strip() or "(detached)"
+        typer.echo(f"Git: active (branch: {branch})")
+        status_result = subprocess.run(
+            ["git", "status", "--short"],
+            cwd=project_dir,
+            capture_output=True,
+            text=True,
+        )
+        if status_result.stdout.strip():
+            typer.echo("")
+            typer.echo(status_result.stdout.strip())
+    else:
+        typer.echo("Git: not initialized (run `whatif ingest --commit` to init)")
+
+
+@app.command()
 def review(
     project_root: Path | None = typer.Option(
         None,

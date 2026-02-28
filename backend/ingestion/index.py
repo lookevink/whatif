@@ -12,8 +12,8 @@ from .config import (
     get_project_root,
     get_project_dir,
     get_project_name,
-    get_studio_dir,
-    get_studio_cache_dir,
+    get_project_index_path,
+    get_project_cache_dir,
     get_characters_dir,
     get_scenes_dir,
     get_world_dir,
@@ -359,7 +359,7 @@ def _populate_index(conn, project_root: Path) -> None:
 
 
 def reindex(project_root: Path | None = None) -> None:
-    """Rebuild SQLite index from YAML files."""
+    """Rebuild SQLite index from YAML files. Index lives in project_dir."""
     import sqlite3
 
     root = project_root or get_project_root()
@@ -367,11 +367,10 @@ def reindex(project_root: Path | None = None) -> None:
     project_dir = get_project_dir(root)
 
     current_hash = compute_yaml_hash(root, project_name)
-    studio_dir = get_studio_dir(root)
-    index_path = studio_dir / INDEX_DB_NAME
-    version_path = studio_dir / INDEX_VERSION_NAME
+    index_path = get_project_index_path(root, project_name)
+    version_path = project_dir / INDEX_VERSION_NAME
 
-    studio_dir.mkdir(parents=True, exist_ok=True)
+    project_dir.mkdir(parents=True, exist_ok=True)
 
     conn = sqlite3.connect(str(index_path))
     try:
@@ -386,10 +385,9 @@ def reindex(project_root: Path | None = None) -> None:
 def ensure_index_fresh(project_root: Path) -> bool:
     """If YAML hash != stored version, reindex. Returns True if index was rebuilt."""
     current = compute_yaml_hash(project_root)
-    stored = None
-    version_path = get_studio_dir(project_root) / INDEX_VERSION_NAME
-    if version_path.exists():
-        stored = version_path.read_text(encoding="utf-8").strip()
+    project_dir = get_project_dir(project_root)
+    version_path = project_dir / INDEX_VERSION_NAME
+    stored = version_path.read_text(encoding="utf-8").strip() if version_path.exists() else None
     if stored != current:
         reindex(project_root)
         return True
@@ -397,12 +395,13 @@ def ensure_index_fresh(project_root: Path) -> bool:
 
 
 def switch_timeline(project_root: Path, timeline_name: str) -> None:
-    """Switch timeline: git checkout + index cache logic."""
+    """Switch timeline: git checkout in project repo + index cache logic."""
     root = project_root or get_project_root()
+    project_dir = get_project_dir(root)
     try:
         subprocess.run(
             ["git", "checkout", timeline_name],
-            cwd=root,
+            cwd=project_dir,
             check=True,
             capture_output=True,
         )
@@ -410,11 +409,11 @@ def switch_timeline(project_root: Path, timeline_name: str) -> None:
         raise RuntimeError(f"git checkout failed: {e.stderr.decode() if e.stderr else e}") from e
 
     current_hash = compute_yaml_hash(root)
-    cache_dir = get_studio_cache_dir(root)
+    cache_dir = get_project_cache_dir(root)
     cache_dir.mkdir(parents=True, exist_ok=True)
     cache_path = cache_dir / f"{timeline_name}.index.db"
-    studio_dir = get_studio_dir(root)
-    index_path = studio_dir / INDEX_DB_NAME
+    index_path = get_project_index_path(root)
+    version_path = project_dir / INDEX_VERSION_NAME
 
     if cache_path.exists():
         stored = _read_index_version(cache_path)
@@ -422,7 +421,7 @@ def switch_timeline(project_root: Path, timeline_name: str) -> None:
             if index_path.exists():
                 index_path.unlink()
             shutil.copy2(cache_path, index_path)
-            (studio_dir / INDEX_VERSION_NAME).write_text(current_hash, encoding="utf-8")
+            version_path.write_text(current_hash, encoding="utf-8")
             return
 
     reindex(root)

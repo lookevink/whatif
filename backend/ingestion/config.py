@@ -72,8 +72,18 @@ def get_studio_dir(project_root: Path) -> Path:
 
 
 def get_studio_cache_dir(project_root: Path) -> Path:
-    """Return the .studio/cache directory for per-branch index cache."""
+    """Return the .studio/cache directory for per-branch index cache (legacy; prefer project cache)."""
     return project_root / ".studio" / "cache"
+
+
+def get_project_index_path(project_root: Path, project_name: str | None = None) -> Path:
+    """Return project_dir/index.db — index lives inside the project."""
+    return get_project_dir(project_root, project_name) / "index.db"
+
+
+def get_project_cache_dir(project_root: Path, project_name: str | None = None) -> Path:
+    """Return project_dir/cache/ — per-branch index cache inside the project."""
+    return get_project_dir(project_root, project_name) / "cache"
 
 
 def get_pipeline_dir(project_root: Path, project_name: str | None = None) -> Path:
