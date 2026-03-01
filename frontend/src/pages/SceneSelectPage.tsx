@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GitTreeVisualization } from '../components/studio/GitTreeVisualization';
 import { SceneSelector } from '../components/studio/SceneSelector';
+import { Button } from '@/components/ui/button';
 import { BauhausLogo } from '../components/studio/BauhausLogo';
 import type { Scene, Commit } from '../lib/studio/types';
 
@@ -41,6 +42,15 @@ export const SceneSelectPage: React.FC = () => {
                 </p>
               </div>
             </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => navigate('/characters')}
+              className="bg-white text-[#121212] border-[#121212] shadow-bauhaus-sm"
+            >
+              Characters
+            </Button>
           </div>
         </div>
       </header>

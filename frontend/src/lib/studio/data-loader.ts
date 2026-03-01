@@ -1,4 +1,4 @@
-import type { Scene, CharacterProfile, Location, DataStatus } from './types';
+import type { Scene, CharacterProfile, CharacterListItem, CharacterDetail, Location, DataStatus } from './types';
 import * as yaml from 'js-yaml';
 
 /**
@@ -271,6 +271,36 @@ export class StudioDataLoader {
     }
 
     return [];
+  }
+
+  /**
+   * Load all characters with list-level data (for gallery page)
+   */
+  async loadAllCharacters(): Promise<CharacterListItem[]> {
+    try {
+      const response = await fetch(`${this.projectRoot}/characters`);
+      if (response.ok) {
+        return await response.json();
+      }
+    } catch (error) {
+      console.warn('Could not load characters:', error);
+    }
+    return [];
+  }
+
+  /**
+   * Load detailed character data (for character detail view)
+   */
+  async loadCharacterDetail(characterId: string): Promise<CharacterDetail | null> {
+    try {
+      const response = await fetch(`${this.projectRoot}/characters/${characterId}`);
+      if (response.ok) {
+        return await response.json();
+      }
+    } catch (error) {
+      console.warn(`Could not load character ${characterId}:`, error);
+    }
+    return null;
   }
 
   /**

@@ -370,6 +370,44 @@ export interface DialogueCharacter {
   dialogueReady: boolean;
 }
 
+// Character Gallery types
+export interface CharacterDataCompleteness {
+  hasVoice: boolean;
+  hasKnowledge: boolean;
+  hasArc: boolean;
+  hasRelationships: boolean;
+  hasVisual: boolean;
+  hasGlb: boolean;
+  hasImages: boolean;
+}
+
+export interface CharacterListItem {
+  id: string;
+  name: string;
+  description: string;
+  imageUrls: { front?: string; side?: string; back?: string };
+  dataCompleteness: CharacterDataCompleteness;
+}
+
+export interface CharacterDetail {
+  id: string;
+  name: string;
+  profile?: Record<string, any>;
+  voice?: Record<string, any>;
+  knowledge?: Record<string, any>;
+  arc?: Record<string, any>;
+  relationships?: Record<string, any>;
+  visual?: CharacterVisual;
+  imageUrls: { front?: string; side?: string; back?: string };
+}
+
+export interface CharacterImageGenResult {
+  success: boolean;
+  character_id: string;
+  generated_count: number;
+  results: Record<string, { status: string; url?: string | null }>;
+}
+
 // Storyboard generation types
 export interface StoryboardRequest {
   sceneId: string;

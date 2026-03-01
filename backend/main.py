@@ -1055,6 +1055,149 @@ def _generate_veo_prompt_md(
     return "\n".join(lines)
 
 
+# --- Character Image Generation ---
+
+
+class CharacterImageGenerateRequest(BaseModel):
+    character_id: str
+    project_name: str | None = "default"
+    views: list[str] | None = ["front", "side", "back"]
+    force_regenerate: bool = False
+
+
+class BatchCharacterImageRequest(BaseModel):
+    character_ids: list[str] | None = None
+    project_name: str | None = "default"
+    views: list[str] | None = ["front", "side", "back"]
+    skip_existing: bool = True
+    min_description_length: int = 20
+
+
+def _load_character_visual(char_id: str, project_name: str) -> dict:
+    """Load character assets/visual.yaml for appearance and wardrobe data."""
+    project_root = get_project_root()
+    chars_dir = get_characters_dir(project_root, project_name)
+    visual_path = chars_dir / char_id / "assets" / "visual.yaml"
+    if visual_path.exists():
+        return yaml.safe_load(visual_path.read_text(encoding="utf-8")) or {}
+    return {}
+
+
+def _build_character_image_prompt(
+    char_id: str,
+    profile: dict,
+    visual: dict,
+    view: str,
+) -> str:
+    """Build a rich prompt for character reference image generation."""
+    parts: list[str] = []
+
+    parts.append(
+        "Character reference sheet illustration, clean neutral background, "
+        "full-body portrait, highly detailed, consistent proportions"
+    )
+
+    view_descriptions = {
+        "front": "front-facing view, looking directly at camera",
+        "side": "three-quarter profile view, 45-degree angle",
+        "back": "rear view, character facing away from camera",
+    }
+    parts.append(view_descriptions.get(view, view_descriptions["front"]))
+
+    name = profile.get("name", char_id.replace("_", " ").title())
+    description = profile.get("description", "")
+    parts.append(f"Character: {name}")
+    if description:
+        parts.append(description)
+
+    appearance = visual.get("appearance", {})
+    if appearance:
+        for key, label in [
+            ("ageApparent", "Apparent age"),
+            ("build", "Build"),
+            ("height", "Height"),
+            ("hair", "Hair"),
+            ("eyes", "Eyes"),
+            ("skinTone", "Skin tone"),
+            ("distinguishing", "Distinguishing features"),
+        ]:
+            val = appearance.get(key)
+            if val:
+                parts.append(f"{label}: {val}")
+
+    wardrobe = visual.get("wardrobe", {})
+    default_outfit = wardrobe.get("default")
+    if default_outfit:
+        parts.append(f"Wearing: {default_outfit}")
+
+    parts.append("19th century Gothic horror, period-accurate costume and setting")
+    parts.append("Dramatic lighting, painterly style, character design reference sheet")
+
+    return ". ".join(parts)
+
+
+async def _generate_character_image(prompt: str, output_path: Path) -> bool:
+    """Generate a character reference image using Nano Banana 2.
+
+    Uses 1:1 aspect ratio for character portraits.
+    Returns True if image was generated, False otherwise.
+    """
+    api_key = get_gemini_api_key()
+    if not api_key:
+        print("No Gemini API key found, skipping character image generation")
+        return False
+
+    _genai, _types = _get_genai()
+    client = _genai.Client(vertexai=False, api_key=api_key)
+
+    try:
+        response = client.models.generate_content(
+            model="gemini-3.1-flash-image-preview",
+            contents=[prompt],
+            config=_types.GenerateContentConfig(
+                response_modalities=["TEXT", "IMAGE"],
+                image_config=_types.ImageConfig(
+                    aspect_ratio="1:1",
+                ),
+            ),
+        )
+
+        for part in response.parts:
+            if part.inline_data and part.inline_data.mime_type.startswith("image/"):
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                output_path.write_bytes(part.inline_data.data)
+                return True
+
+    except Exception as e:
+        print(f"Character image gen failed for {output_path.name}: {e}")
+
+    return False
+
+
+def _update_visual_yaml_references(
+    char_id: str, project_name: str, generated_views: list[str]
+) -> None:
+    """Update (or create) visual.yaml with referenceImages paths."""
+    project_root = get_project_root()
+    chars_dir = get_characters_dir(project_root, project_name)
+    assets_dir = chars_dir / char_id / "assets"
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    visual_path = assets_dir / "visual.yaml"
+
+    visual: dict = {}
+    if visual_path.exists():
+        visual = yaml.safe_load(visual_path.read_text(encoding="utf-8")) or {}
+
+    visual["referenceImages"] = [
+        f"characters/{char_id}/assets/{view}.png" for view in generated_views
+    ]
+
+    visual_path.write_text(
+        yaml.dump(visual, default_flow_style=False, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+
+
 @app.post("/api/studio/projects/{project_name}/storyboard/generate")
 async def api_generate_storyboard_images(
     project_name: str,
@@ -1305,6 +1448,216 @@ def api_whatif_scene_branches(scene_id: str, project_name: str = Query("default"
         return {"scene_id": scene_id, "branches": branches}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Character Gallery & Image Generation API ---
+
+
+@app.get("/api/studio/projects/{project_name}/characters")
+def api_studio_characters(project_name: str):
+    """List all characters with profile data, data completeness, and image URLs."""
+    project_root = get_project_root()
+    chars_dir = get_characters_dir(project_root, project_name)
+    if not chars_dir.exists():
+        return []
+
+    characters = []
+    for char_dir in sorted(chars_dir.iterdir()):
+        if not char_dir.is_dir():
+            continue
+        char_id = char_dir.name
+        profile = _load_character_profile(char_id, project_name)
+
+        has_voice = (char_dir / "voice.yaml").exists()
+        has_knowledge = (char_dir / "knowledge.yaml").exists()
+        has_arc = (char_dir / "arc.yaml").exists()
+        has_relationships = (char_dir / "relationships.yaml").exists()
+        assets_dir = char_dir / "assets"
+        has_visual = (assets_dir / "visual.yaml").exists() if assets_dir.exists() else False
+        has_glb = any(assets_dir.glob("*.glb")) if assets_dir.exists() else False
+
+        image_urls: dict[str, str] = {}
+        for view in ("front", "side", "back"):
+            png_path = assets_dir / f"{view}.png" if assets_dir.exists() else None
+            if png_path and png_path.exists():
+                image_urls[view] = (
+                    f"/api/studio/projects/{project_name}/files/"
+                    f"characters/{char_id}/assets/{view}.png"
+                )
+
+        characters.append({
+            "id": char_id,
+            "name": profile.get("name", char_id.replace("_", " ").title()),
+            "description": profile.get("description", ""),
+            "imageUrls": image_urls,
+            "dataCompleteness": {
+                "hasVoice": has_voice,
+                "hasKnowledge": has_knowledge,
+                "hasArc": has_arc,
+                "hasRelationships": has_relationships,
+                "hasVisual": has_visual,
+                "hasGlb": has_glb,
+                "hasImages": len(image_urls) > 0,
+            },
+        })
+
+    return characters
+
+
+@app.get("/api/studio/projects/{project_name}/characters/{char_id}")
+def api_studio_character_detail(project_name: str, char_id: str):
+    """Load complete character data including all YAML files and image URLs."""
+    project_root = get_project_root()
+    chars_dir = get_characters_dir(project_root, project_name)
+    char_dir = chars_dir / char_id
+    if not char_dir.exists():
+        raise HTTPException(status_code=404, detail=f"Character not found: {char_id}")
+
+    data = _load_character_data(char_id, project_name)
+    data["visual"] = _load_character_visual(char_id, project_name)
+
+    assets_dir = char_dir / "assets"
+    image_urls: dict[str, str] = {}
+    for view in ("front", "side", "back"):
+        png_path = assets_dir / f"{view}.png" if assets_dir.exists() else None
+        if png_path and png_path.exists():
+            image_urls[view] = (
+                f"/api/studio/projects/{project_name}/files/"
+                f"characters/{char_id}/assets/{view}.png"
+            )
+    data["imageUrls"] = image_urls
+
+    return data
+
+
+@app.post("/api/studio/projects/{project_name}/characters/{char_id}/generate-images")
+async def api_generate_character_images(
+    project_name: str,
+    char_id: str,
+    request: CharacterImageGenerateRequest,
+):
+    """Generate front/side/back reference images for a single character."""
+    project_root = get_project_root()
+    chars_dir = get_characters_dir(project_root, project_name)
+    char_dir = chars_dir / char_id
+    if not char_dir.exists():
+        raise HTTPException(status_code=404, detail=f"Character not found: {char_id}")
+
+    profile = _load_character_profile(char_id, project_name)
+    visual = _load_character_visual(char_id, project_name)
+    assets_dir = char_dir / "assets"
+    assets_dir.mkdir(parents=True, exist_ok=True)
+
+    views = request.views or ["front", "side", "back"]
+    generated_views: list[str] = []
+    results: dict[str, dict] = {}
+
+    for view in views:
+        output_path = assets_dir / f"{view}.png"
+
+        if output_path.exists() and not request.force_regenerate:
+            results[view] = {
+                "status": "skipped",
+                "url": (
+                    f"/api/studio/projects/{project_name}/files/"
+                    f"characters/{char_id}/assets/{view}.png"
+                ),
+            }
+            generated_views.append(view)
+            continue
+
+        prompt = _build_character_image_prompt(char_id, profile, visual, view)
+        success = await _generate_character_image(prompt, output_path)
+
+        if success:
+            generated_views.append(view)
+            results[view] = {
+                "status": "generated",
+                "url": (
+                    f"/api/studio/projects/{project_name}/files/"
+                    f"characters/{char_id}/assets/{view}.png"
+                ),
+            }
+        else:
+            results[view] = {"status": "failed", "url": None}
+
+    if generated_views:
+        _update_visual_yaml_references(char_id, project_name, generated_views)
+
+    return {
+        "success": len(generated_views) > 0,
+        "character_id": char_id,
+        "generated_count": sum(1 for v in results.values() if v["status"] == "generated"),
+        "results": results,
+    }
+
+
+@app.post("/api/studio/projects/{project_name}/characters/generate-images")
+async def api_batch_generate_character_images(
+    project_name: str,
+    request: BatchCharacterImageRequest,
+):
+    """Batch generate reference images for multiple characters."""
+    project_root = get_project_root()
+    chars_dir = get_characters_dir(project_root, project_name)
+    if not chars_dir.exists():
+        raise HTTPException(status_code=404, detail="Characters directory not found")
+
+    if request.character_ids:
+        char_ids = request.character_ids
+    else:
+        char_ids = sorted(
+            d.name for d in chars_dir.iterdir()
+            if d.is_dir() and (d / "profile.yaml").exists()
+        )
+
+    views = request.views or ["front", "side", "back"]
+    results: dict[str, dict] = {}
+    total_generated = 0
+
+    for char_id in char_ids:
+        profile = _load_character_profile(char_id, project_name)
+        description = profile.get("description", "")
+
+        if len(description) < request.min_description_length:
+            results[char_id] = {"status": "skipped", "reason": "description too short"}
+            continue
+
+        visual = _load_character_visual(char_id, project_name)
+        assets_dir = chars_dir / char_id / "assets"
+        assets_dir.mkdir(parents=True, exist_ok=True)
+
+        char_results: dict[str, dict] = {}
+        generated_views: list[str] = []
+
+        for view in views:
+            output_path = assets_dir / f"{view}.png"
+            if output_path.exists() and request.skip_existing:
+                char_results[view] = {"status": "skipped"}
+                generated_views.append(view)
+                continue
+
+            prompt = _build_character_image_prompt(char_id, profile, visual, view)
+            success = await _generate_character_image(prompt, output_path)
+
+            if success:
+                generated_views.append(view)
+                char_results[view] = {"status": "generated"}
+                total_generated += 1
+            else:
+                char_results[view] = {"status": "failed"}
+
+        if generated_views:
+            _update_visual_yaml_references(char_id, project_name, generated_views)
+
+        results[char_id] = {"views": char_results}
+
+    return {
+        "success": True,
+        "total_characters": len(char_ids),
+        "total_generated": total_generated,
+        "results": results,
+    }
 
 
 # --- Character Dialogue API ---
