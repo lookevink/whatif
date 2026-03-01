@@ -42,15 +42,26 @@ export const SceneSelectPage: React.FC = () => {
                 </p>
               </div>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => navigate('/characters')}
-              className="bg-white text-[#121212] border-[#121212] shadow-bauhaus-sm"
-            >
-              Characters
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => navigate('/upload')}
+                className="bg-white text-[#121212] border-[#121212] shadow-bauhaus-sm"
+              >
+                Upload
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => navigate('/characters')}
+                className="bg-white text-[#121212] border-[#121212] shadow-bauhaus-sm"
+              >
+                Characters
+              </Button>
+            </div>
           </div>
         </div>
       </header>
